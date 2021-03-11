@@ -228,8 +228,6 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 
   Copyright ©2021 Shanghai Institute of Nutrition and Health. All Rights Reserved.
 
-  Licensed GPLv3 for open source use or contact YangLab (yanglab@picb.ac.cn) for commercial use.
+  Licensed GPLv3 for open source use or contact YangLab (yanglab@picb.ac.cn) for commercial use. See [LICENSE](https://github.com/YangLabPublic/SCAPTURE) file.
 
   Permission to use, copy, modify, and distribute this software and its documentation for educational, research, and not-for-profit purposes, without fee and without a signed licensing agreement, is hereby granted, provided that the above copyright notice in all copies, modifications, and distributions. 
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
