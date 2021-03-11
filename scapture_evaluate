@@ -1,0 +1,105 @@
+#!/bin/bash
+helpdoc(){
+    cat <<EOF
+Description:
+	SCAPRUTE module: peak evaluating
+
+Usage:
+    scapture_evaluate [options]
+    -h/---help  -- help information
+    
+Parameters passed from SCAPRUTE:
+ -o          -- Prefix of output file
+ -g          -- genome fa file
+ --peak      -- peak file to evaluate
+ --path      -- path of scapture suite (ignore if scapture in PATH)
+ --model     -- DeepPASS model h5 file (ignore if scapture in PATH)
+ --polyaDB   -- poly(A) site database bed6 file (optional)
+ -h/---help  -- help information
+
+Version: 1.0 2021/01/25
+
+Author: Guo-Wei Li Email: liguowei@picb.ac.cn
+EOF
+}
+
+if [ $# = 0 ]
+then
+    helpdoc
+    exit 1
+fi
+
+#default parameters:
+
+#get command line parameters
+ARGS=`getopt -o o:g:h --long peak:,path:,model:,polyaDB:,help  -- "$@"`
+eval set -- "$ARGS"
+while true ; do
+	case "$1" in
+		-o) PREFIX=$2 ; shift 2;;
+		-g) GENOME=$2 ; shift 2;;
+		--peak) PEAK=$2 ; shift 2;;
+		--path) SCAPTUREPATH=$2 ; DeepPASSmodel=$SCAPTUREPATH"DeepPASS/best_model.h5" ; DeepPASSpredict=$SCAPTUREPATH"DeepPASS/Predict.py"; shift 2;;
+		--model) DeepPASSmodel=$2 ; shift 2;;
+		--polyaDB) POLYADB=$2 ; shift 2;;
+		-h) helpdoc ; exit 1;;
+		--help) helpdoc ; exit 1;;
+		--)
+			shift
+			break
+			;;
+		*) echo "unknown parameter:" $1; helpdoc; exit 1;;
+	esac
+done
+
+<<'COMMENT'
+echo "Output prefix: "$PREFIX
+echo "Genome file: "$GENOME
+echo "PEAK: "$PEAK
+echo "scapture path: "$SCAPTUREPATH
+echo "DeepPASS model file: "$DeepPASSmodel
+echo "poly(A) databases file: "$POLYADB
+COMMENT
+
+#check parameters:
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+		DeepPASSmodel=$SCAPTUREPATH"DeepPASS/best_model.h5"
+		DeepPASSpredict=$SCAPTUREPATH"DeepPASS/Predict.py"
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+
+if [ ! -e "$GENOME" ]; then echo "GENOME dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$PEAK" ]; then echo "PEAK dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$DeepPASSmodel" ]; then echo "DeepPASS model dosn't exisits! exit !"; exit 1; fi;
+
+#echo "scapture_evaluate: predicting by DeepPASS"
+IntputBED=$(cat $PEAK)
+IntputSeq=$(echo "$IntputBED" | perl -alne '$key="$F[0]:$F[1]-$F[2]|$F[5]|$F[3]"; $F[3]=$key; $F[10]="200,";$F[11]="0,";$F[9]=1; if($F[5] eq "+"){ $F[1]=$F[2]-100; $F[2]=$F[2]+100;}; if($F[5] eq "-"){ $F[2]=$F[1]+100;$F[1]=$F[1]-100;}; $F[6]=$F[2];$F[7]=$F[2];$,="\t";print @F;' | bedtools getfasta -bed - -fi $GENOME -s -split -name | paste - - | perl -alne '$F[1]=~tr/atcgn/ATCGN/; $,="\t"; $F[0]=~/^>(.+)::.+\(.\)/; $F[0]=$1; print @F;')
+echo "$IntputSeq" > $PREFIX".DeepPASS"
+python $DeepPASSpredict -m $DeepPASSmodel -p $PREFIX".DeepPASS" -o $PREFIX".DeepPASS.predictout" &> /dev/null
+DeepPASS=$(cat $PREFIX".DeepPASS.predictout/Predict_Result.txt" )
+rm -fr $PREFIX".DeepPASS.predictout" $PREFIX".DeepPASS"
+
+#echo "scapture_evaluate: evaluate with POLYADB"
+PADBanno=""
+if [ "$POLYADB" == "NULL" ]; then
+	#echo "no POLYADB file"
+	PADBanno=$(echo "$IntputBED" | perl -alne '$,="\t";$key="$F[0]:$F[1]-$F[2]|$F[5]|$F[3]"; print $key,"NA";')
+else
+	#echo "$POLYADB"
+	PADBanno=$(echo "$IntputBED" | perl -alne '$key="$F[0]:$F[1]-$F[2]|$F[5]|$F[3]"; $F[3]=$key; $F[10]="75,";$F[11]="0,";$F[9]=1; if($F[5] eq "+"){ $F[1]=$F[2]-50; $F[2]=$F[2]+25;}; if($F[5] eq "-"){ $F[2]=$F[1]+50;$F[1]=$F[1]-25;}; $F[6]=$F[2];$F[7]=$F[2];$,="\t";print @F;' | bedtools intersect -a - -b $POLYADB -s -wb | perl -alne 'if($#ARGV==0){$padb{$F[3]}++;}else{ $key="$F[0]:$F[1]-$F[2]|$F[5]|$F[3]"; $pas=0;$pas=$padb{$key} if $padb{$key}; $,="\t"; print $key,$pas;}' - <(echo "$IntputBED") )
+fi
+	
+#echo "scapture_evaluate: Combinde DeepPASS with POLYADB"
+perl -alne 'if($#ARGV==1){ $DeepPASS{$F[0]}="positive\t$F[1]" if $F[2]==1; $DeepPASS{$F[0]}="negative\t$F[1]" if $F[2]==0;}elsif($#ARGV==0){$polyADB{$F[0]}=$F[1];}else{$key="$F[0]:$F[1]-$F[2]|$F[5]|$F[3]"; $predict="NA\tNA"; $anno="NA";  $predict=$DeepPASS{$key} if exists $DeepPASS{$key}; $anno=$polyADB{$key} if exists $polyADB{$key};  $,="\t"; print @F,$anno,$predict;}' <(echo "$DeepPASS") <(echo "$PADBanno") <(echo "$IntputBED") > $PREFIX".evaluated.bed"
+unset IntputBED IntputSeq DeepPASS PADBanno
+
+#echo 	$PREFIX".evaluated.bed"

@@ -1,0 +1,125 @@
+#!/bin/bash
+helpdoc(){
+    cat <<EOF
+Description:
+	SCAPRUTE module: annotation 
+
+Usage:
+    scapture_annotation [options]
+    -h/---help  -- help information
+    
+Parameters passed from SCAPRUTE:
+ -o          -- prefix of output file
+ -g          -- genome .fa file
+ --gtf       -- gene annotation file (GTF format,
+                recomannd GENOCODE annotation with
+                "gene_name" and "gene_type" tags)
+ --cs        -- chrom size file
+ --extend    -- extended dowstream distance of
+                gene annotation to call peaks
+                (bp, default: 2000)
+ --path      -- path of scapture suite (ignore if scapture in PATH)
+ -h/---help  -- help information
+
+Version: 1.0 2021/01/25
+
+Author: Guo-Wei Li Email: liguowei@picb.ac.cn
+EOF
+}
+
+if [ $# = 0 ]
+then
+    helpdoc
+    exit 1
+fi
+
+#default parameters:
+GENEextend=2000
+
+#get command line parameters
+ARGS=`getopt -o o:g:h --long gtf:,cs:,extend:,path:,help  -- "$@"`
+eval set -- "$ARGS"
+while true ; do
+	case "$1" in
+		-o) PREFIX=$2 ; shift 2;;
+		-g) GENOME=$2 ; shift 2;;
+		--gtf) GENEGTF=$2 ; shift 2;;
+		--cs) GENEchromsize=$2 ; shift 2;;
+		--extend) GENEextend=$2 ; shift 2;;
+		--path) SCAPTUREPATH=$2 ; shift 2;;
+		-h) helpdoc ; exit 1;;
+		--help) helpdoc ; exit 1;;
+		--)
+			shift
+			break
+			;;
+		*) echo "unknown parameter:" $1; helpdoc; exit 1;;
+	esac
+done
+
+<<'COMMENT'
+echo "Output prefix: "$PREFIX
+echo "GENEGTF: "$GENEGTF
+echo "Genome file: "$GENOME
+echo "chrom size file: "$GENEchromsize
+echo "Gene extend distance: "$GENEextend
+echo "path of scapture: "$SCAPTUREPATH
+COMMENT
+
+#check parameters:
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+if [ ! -e "$GENOME" ]; then echo $GENOME" dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$GENEGTF" ]; then echo $GENEGTF" dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$GENEchromsize" ]; then echo $GENEchromsize" dosn't exisits! exit !"; exit 1; fi;
+
+#echo -n "scapture_annotation: prepare transcript level annotation files "; date
+#Generate annotation files: $PREFIX".genetype.bed" $PREFIX".genetype.gtf" $PREFIX".genetype.txt"
+cat $GENEGTF | perl -alne 'next if $F[2] ne "gene"; $_=~/gene_type "(.+?)";/;$t=$1; $_=~/gene_name "(.+?)"/;$n=$1; $,="\t"; print $n,$t;' > $PREFIX".genetype"
+cat $GENEGTF | gtfToGenePred -genePredExt -geneNameAsName2 /dev/stdin /dev/stdout | perl -alne '$,="\t";$F[0]="$F[11]|$F[0]";print @F[0..9];' | genePredToBed /dev/stdin $PREFIX".gene_isoform.bed"
+perl -alne 'if($#ARGV==0){$g{$F[0]}="coding" if $F[1] eq "protein_coding"; $g{$F[0]}="lncRNA" if $g{$F[0]} ne "coding" & $F[1] eq "lncRNA"; $g{$F[0]}="others" if $g{$F[0]} ne "coding" & $g{$F[0]} ne "lncRNA"; }else{ @s=split(/\|/,$F[3]); $n="NULL"; $n=$g{$s[0]} if $g{$s[0]}; $F[3]="$s[0]|$n|$s[1]"; $,="\t"; print @F;};' $PREFIX".genetype" $PREFIX".gene_isoform.bed" | sort -k1,1 -k2,2n > $PREFIX".genetype.bed"
+cat $PREFIX".genetype.bed" | bedToGenePred /dev/stdin /dev/stdout | genePredToGtf -utr file /dev/stdin $PREFIX".genetype.gtf"
+cat $PREFIX".genetype.gtf" | gtfToGenePred /dev/stdin /dev/stdout | perl -alne '$,="\t";print @F[0..9];' > $PREFIX".genetype.txt"
+rm $PREFIX".genetype" $PREFIX".gene_isoform.bed"
+
+#echo -n "scapture_annotation: extend gene annotation to downstream extended distance utill meet to next gene. "; date
+cat $PREFIX".genetype.bed" | bedToGenePred /dev/stdin /dev/stdout | genePredToGtf -utr file /dev/stdin /dev/stdout | perl -alne '$,="\t";$_=~/gene_id "(.+?)";/; print $F[0],$F[3]-1,$F[4],"$1",$F[2],$F[6];' | perl -alne '$n++; $ifcds=0 if $n==1; $a=$F[3]; $b=$F[3] if $n==1;  if($a ne $b){$,="\n"; print @exon if $ifcds == 0; print @nonexon if $ifcds == 1;  $ifcds=0; $b=$a; @exon=();@nonexon=();};  push @exon,$_ if $F[4] eq "exon"; push @nonexon,$_ if $F[4]=~/[5UTR|CDS|3UTR]/;  $ifcds=1 if $F[4] eq "CDS"; END{print @exon if $ifcds == 0; print @nonexon if $ifcds == 1;}' | sort -k1,1 -k2,2n > $PREFIX".element.txt"
+#wc -l $PREFIX".genetype.gtf" $PREFIX".genetype.bed" $PREFIX".genetype.txt" $PREFIX".element.txt"
+
+#echo -n "scapture_annotation: extend gene annotation to downstream extended distance utill meet to next gene. "; date
+export GENEextend
+LongestBED=$(cat $PREFIX".genetype.bed" | perl -alne '@s=split(/\|/,$F[3]);$g="$F[0]:$s[0]:$s[1]:$F[5]"; $allgene{$g}=1; $gs{$g}=$F[1] unless $gs{$g};$ge{$g}=$F[1] unless $ge{$g}; $gs{$g}=$F[1] if $gs{$g} > $F[1];$ge{$g}=$F[2] if $ge{$g} < $F[2];  END{ for $k (keys %allgene){$,="\t"; @a=split(":",$k); if($a[3] eq "+"){print $a[0],$gs{$k},$ge{$k},"$a[1]|$a[2]",0,$a[3];}  if($a[3] eq "-"){print $a[0],$gs{$k},$ge{$k},"$a[1]|$a[2]",0,$a[3];}  } }' | sort -k1,1 -k2,2n)
+ExtendedplusBED=$(echo "$LongestBED" | sort -k1,1 -k2,2n | perl -alne 'next if $F[5] eq "-"; $,="\t"; push @all,join("\t",@F); END{  for($i=0;$i<=$#all;$i++){ @g=split("\t",$all[$i]);  $ge = $g[2]; $g[2]=$g[2]+$ENV{GENEextend};  for($j=$i+1;$j<=$#all;$j++){ @ng=split("\t",$all[$j]); if($g[0] ne $ng[0] | $ge+$ENV{GENEextend} < $ng[1]){last;}; if($g[0] eq $ng[0]){  if($g[2]>=$ng[1]){  $g[2]=$ng[1]-1 if $ng[1]-1 >= $ge;$g[2]=$ge if $ng[1]-1 <= $ge;  }; }; };  print @g; }  }')
+ExtendedminusBED=$(echo "$LongestBED" | sort -k1,1 -k3,3nr | perl -alne 'next if $F[5] eq "+"; $,="\t"; push @all,join("\t",@F); END{  for($i=0;$i<=$#all;$i++){ @g=split("\t",$all[$i]);  $gs = $g[1]; $g[1]=$g[1]-$ENV{GENEextend};  for($j=$i+1;$j<=$#all;$j++){ @ng=split("\t",$all[$j]); if($g[0] ne $ng[0] | $gs-$ENV{GENEextend} > $ng[2]){last;}; if($g[0] eq $ng[0]){  if($g[1]<=$ng[2]){  $g[1]=$ng[2]+1 if $ng[2]+1 <= $gs;$g[1]=$gs if $ng[2]+1 >= $gs;  }; }; };  print @g; }  }')
+ExtendedBED=$(echo "$ExtendedplusBED" "$ExtendedminusBED" | sort -k1,1 -k2,2n | perl -alne 'if($#ARGV==0){$cl{$F[0]}=$F[1]}else{ if($cl{$F[0]}){  $F[1]=1 if $F[1] <=1; $F[2]=$cl{$F[0]} if $F[2] >= $cl{$F[0]}; };  $,="\t"; print @F;}' $GENEchromsize - )
+echo "$ExtendedBED" | sort -k1,1 -k2,2n > $PREFIX".genetype.extended.bed"
+#echo $PREFIX".genetype.extended.bed"
+unset LongestBED ExtendedplusBED ExtendedminusBED ExtendedBED
+wait
+
+#echo "scapture_annotation: check genome index"
+if [ ! -e $GENOME".fai" ]; then
+	echo -n "no "$GENOME".fai file, generate ..."
+	samtools faidx $GENOME
+	if [ -e $GENOME".fai" ]; then
+		echo "creat "$GENOME".fai done"
+	else
+		echo "creat "$GENOME".fai failed! exit!"
+		echo "please generate "$GENOME".fai munually!"
+	fi
+fi
+
+#echo "scapture_annotation: check chromsome size file"
+cat $GENEchromsize > $PREFIX".chromsize"
+echo -n "Generate annotation file:	"
+echo $PREFIX".genetype.gtf" $PREFIX".genetype.txt" $PREFIX".genetype.bed" $PREFIX".genetype.extended.bed" $PREFIX".chromsize"
+wait

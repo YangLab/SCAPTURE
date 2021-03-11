@@ -1,0 +1,325 @@
+#!/bin/bash
+helpdoc(){
+    cat <<EOF
+Description:
+	SCAPRUTE pipeline. A deep learning-embedded pipeline that captures polyadenylation information from 3 prime tag-based RNA-seq of single cells
+
+Usage:
+    scapture -m <annotation|PAScall|PASmerge|PASquant> [options]
+    -h/---help  -- help information
+
+Module:         annotation
+Options:
+ -o          -- Prefix of output file
+ -g          -- genome .fa file
+ --gtf       -- gene annotation file (GTF format, recomannd GENOCODE annotation with "gene_name" and "gene_type" tags)
+ --cs        -- chrom size file
+ --extend    -- extended dowstream distance of 3 prime gene annotation to call peaks (bp, default: 2000)
+ 
+Module:         PAScall
+Options:
+ -a          -- prefix of output annotation files in "annotation" module
+ -o          -- Prefix of output file
+ -b          -- Cell Ranger aligned BAM file
+ -g          -- genome .fa file
+ -p          -- number of cores
+ -l          -- Read length of sequenceing cDNA in scRNA-seq
+ -w          -- width of poly(A) peaks (default: 400)
+ --overlap   -- overlapped ratio of exonic peaks to merge (default: 0.5)
+ --polyaDB   -- poly(A) site database bed6 file (optional)
+ 
+Module:         PASmerge
+Options:
+ -o          -- Prefix of output file
+ --peak      -- list of evaluated peak files to merge 
+                (one sample per line, split by tab,
+                 1st col: "Sample_name",
+                 2cd col: "PathofEvaluatedPeakFile" )
+ --path      -- path of scapture suite (ignore if scapture in PATH)
+ --rawpeak   -- raw peak files to merge (Restricted by --peak)
+ 
+ 
+Module:         PASquant 
+Options:
+ -o          -- output prefix
+ -p          -- number of threads.
+ -b          -- Cell Ranger aligned BAM file.
+ --pas       -- PASs peaks file to quantify.
+ --celllist  -- Cell barcode as white list to count UMIs.
+ --celltype  -- Cell type annotation file
+                (tab split, 
+                1st col: "cell_barcode",
+                2cd col: "cell_type" ).
+ --bw        -- generate bigwiggle file for each
+                cell type in --celltype option
+                (true, false, default: false)
+
+Version: 1.0 2021/01/25
+
+Author: Guo-Wei Li Email: liguowei@picb.ac.cn
+EOF
+}
+
+if [ $# = 0 ]; then
+    helpdoc
+    exit 1
+fi
+
+#default parameters:
+POLYADB="NULL"
+GENEextend=2000
+PeakList="NULL"
+RawPeakList="NULL"
+OverlapRatio=0.5
+PeakWidth=400
+CellList="NULL"
+CellType="NULL"
+ConvertBW="false"
+MEGAthread=4
+#get command line parameters
+ARGS=`getopt -o m:a:o:b:g:l:w:p:h --long gtf:,cs:,extend:,overlap:,polyaDB:,peak:,rawpeak:,pas:,celllist:,celltype:,bw:,help  -- "$@"`
+eval set -- "$ARGS"
+while true ; do
+	case "$1" in
+		-m) MODULE=$2 ; shift 2;;
+		-a) ANNO=$2 ; shift 2;;
+		-b) BAMFILE=$2 ; shift 2;;
+		-l) FragLength=$2 ; shift 2;;
+		-w) PeakWidth=$2 ; shift 2;;
+		-o) PREFIX=$2 ; OUTDIR=$PREFIX"_tmp" ; shift 2;;
+		-p) MEGAthread=$2 ; shift 2;;
+		-g) GENOME=$2 ; shift 2;;
+		--gtf) GENEGTF=$2 ; shift 2;;
+		--cs) ChromSize=$2 ; shift 2;;
+		--extend) GENEextend=$2 ; shift 2;;
+		--overlap) OverlapRatio=$2 ; shift 2;;
+		--polyaDB) POLYADB=$2 ; shift 2;;
+		--peak) PeakList=$2 ; shift 2;;
+		--rawpeak) RawPeakList=$2 ; shift 2;;
+		--pas) PAS=$2 ; shift 2;;
+		--celllist) CellList=$2 ; shift 2;;
+		--celltype) CellType=$2 ; shift 2;;
+		--bw) ConvertBW=$2 ; shift 2;;
+		-h) helpdoc ; exit 1;;
+		--help) helpdoc ; exit 1;;
+		--)
+			shift
+			break
+			;;
+		*) echo "unknown parameter:" $1; helpdoc; exit 1;;
+	esac
+done
+
+#get path of scapture
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+
+<<'COMMENT'
+if [ "$SCAPTUREPATH" != "" ]; then echo "scapture path: "$SCAPTUREPATH; fi
+if [ "$MODULE" != "" ]; then echo "scapture module: "$MODULE; fi
+if [ "$PREFIX" != "" ]; then echo "Output prefix: "$PREFIX; fi
+if [ "$ANNO" != "" ]; then echo "prefix of annotation files from annotation module: "$ANNO; fi
+if [ "$BAMFILE" != "" ]; then echo "BAM file: "$BAMFILE; fi
+if [ "$FragLength" != "" ]; then echo "Fragment length: "$FragLength; fi
+if [ "$GENEGTF" != "" ]; then echo "GENCODE GTF: "$GENEGTF; fi
+if [ "$GENOME" != "" ]; then echo "GENOME file: "$GENOME; fi
+if [ "$ChromSize" != "" ]; then echo "chrom size file: "$ChromSize; fi
+if [ "$PeakWidth" != "" ]; then echo "Peak width: "$PeakWidth; fi
+if [ "$OverlapRatio" != "" ]; then echo "OverlapRatio: "$OverlapRatio; fi
+if [ "$MEGAthread" != "" ]; then echo "threads: "$MEGAthread; fi
+if [[ "$PeakList" != "" && "$PeakList" != "NULL" ]]; then echo "evaluated peak: "$PeakList; fi
+if [[ "$RawPeakList" != "" && "$RawPeakList" != "NULL" ]]; then echo "raw peak: "$RawPeakList; fi
+if [ "$PAS" != "" ]; then echo "PAS peaks: "$PAS; fi
+if [[ "$POLYADB" != "" && "$POLYADB" != "NULL" ]]; then echo "poly(a) database file: "$POLYADB; fi
+if [[ "$CellList" != "" && "$CellList" != "NULL" ]]; then echo "Cell list: "$CellList; fi
+if [[ "$CellType" != "" && "$CellType" != "NULL" ]]; then echo "Cell type list: "$CellType; fi
+if [[ "$ConvertBW" != "" && "$ConvertBW" != "false" ]]; then echo "Convert BAM to BW each cell type: "$ConvertBW; fi
+COMMENT
+
+#File format used in scapture
+#BAMFILE: BAM file created by Cell Ranger, typically:
+#Tag field:
+#CB - corrected cellbarcode (like "TTGCTGCTCTGCTGAA-1")
+#UB - corrected UMI (like "GATGGATGAGTG")
+#MAPQ - followed cellrange setting (only mapq 255 reads will be used in cellranger analysis, so do this pipeline)
+#				see: https://kb.10xgenomics.com/hc/en-us/articles/115003710383-Which-reads-are-considered-for-UMI-counting-by-Cell-Ranger-
+#       see: https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/output/bam
+#Segment of reads:
+#A00228:279:HFWFVDMXX:2:2221:18412:27743	272	chr1	258396	0	91M	*	0	0	TGCTTGAGTTCTAGTCAAATAAGCTAATATTATACTTACTAGAAACGTAAAATCTTAAAGCTTATAGATTTGATTCTAATTAAGTTGTCAT	FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF	CB:Z:TTGCTGCTCTGCTGAA-1	UB:Z:GATGGATGAGTG	BC:Z:CCAAGATG	RE:A:E	RG:Z:pbmc_10k_v3:0:1:HFWFVDMXX:2	NH:i:7	HI:i:7	nM:i:0	GN:Z:AP006222.1	CR:Z:TTGCTGCTCTGCTGAA	UR:Z:GATGGATGAGTG	AS:i:89	QT:Z:FFFFFFFF	GX:Z:ENSG00000228463.10	TX:Z:ENST00000441866.2,+1913,91M;ENST00000442116.1,+669,91M;ENST00000448958.2,+1676,91M	CY:Z:FFFFFFFFFFFFFFFF	UY:Z:FFFFFFFFFFFF	li:i:0	fx:Z:ENSG00000228463.10
+#A00228:279:HFWFVDMXX:1:1176:13331:27023	272	chr1	258399	0	91M	*	0	0	TTGAGTTCTAGTCAAATAAGCTAATATTATACTTACTAGAAACGTAAAATCTTAAAGCTTATAGATTTGATTCTAATTAAGTTGTCATTCT	FFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFF::F,FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:F	CB:Z:TCATGAGAGGGTATAT-1	UB:Z:TGACTGATGGTA	BC:Z:AGGCCCGA	RE:A:E	RG:Z:pbmc_10k_v3:0:1:HFWFVDMXX:1	NH:i:7	HI:i:3	nM:i:0	GN:Z:AP006222.1	CR:Z:TCATGAGAGGGTATAT	UR:Z:TGACTGATGGTA	AS:i:89	QT:Z:FFFFFFFF	GX:Z:ENSG00000228463.10	TX:Z:ENST00000441866.2,+1910,91M;ENST00000442116.1,+666,91M;ENST00000448958.2,+1673,91M	CY:Z:FFFFFFFFFFFF,FFF	UY:Z:FFFFF:FFFFFF	li:i:0	fx:Z:ENSG00000228463.10
+
+#polyaDB: poly(A) site database file, given by scapture suite or could be generated by user manually (Column 1-6 is in BED formated).
+#chr1	16441	16442	chr1:16441:16442:-:PolyADB3:3	0	-	intron
+#chr1	16442	16443	chr1:16442:16443:-:PolyA-Seq:3	0	-	intron
+#chr1	16442	16452	chr1:16442:16452:-:PolyASite:3	0	-	intron
+#chr1	89297	89298	chr1:89297:89298:-:PolyA-Seq:2	0	-	exon
+#chr1	89298	89299	chr1:89298:89299:-:PolyADB3:2	0	-	exon
+
+#celltype: cell type file splitted by tab, 1st col: "cell_barcode", 2cd col: "cell_type"
+#AAACCCAAGCGCCCAT-1	CD8+Tmem
+#AAACCCAAGGTTCCGC-1	CD14+mono.
+#AAACCCACAGAGTTGG-1	CD14+mono.
+
+if [ "$MODULE" == "annotation" ]; then
+	echo "scapture path: "$SCAPTUREPATH
+	echo "scapture module: "$MODULE
+	echo "Output prefix: "$PREFIX
+	echo "GENCODE GTF: "$GENEGTF
+	echo "GENOME file: "$GENOME
+	echo "chrom size file: "$ChromSize
+	#echo "CMD: scapture_annotation -o $PREFIX -g $GENOME --gtf $GENEGTF --cs $ChromSize --extend $GENEextend"
+	scapture_annotation -o $PREFIX -g $GENOME --gtf $GENEGTF --cs $ChromSize --extend $GENEextend
+	echo "output annotation file prefix: "$PREFIX
+	wait
+fi
+
+
+if [ "$MODULE" == "PAScall" ]; then
+	echo "scapture path: "$SCAPTUREPATH
+	echo "DeepPASS model file: "$SCAPTUREPATH"/DeepPASS/best_model.h5"
+	echo "scapture module: "$MODULE
+	echo "Output prefix: "$PREFIX
+	echo "prefix of annotation files from annotation module: "$ANNO
+	echo "BAM file: "$BAMFILE
+	echo "Fragment length: "$FragLength
+	echo "GENOME file: "$GENOME
+	echo "Peak width: "$PeakWidth
+	echo "OverlapRatio: "$OverlapRatio
+	echo "threads: "$MEGAthread
+	echo "poly(a) database file: "$POLYADB
+	echo -n "scapture PAScall: create command line. "; date
+#	echo "Note: for 10x Genomics, library strand information is: [ + -> -F 0x10 ] [ - -> -f 0x10 ]"
+	if [ -d $OUTDIR ]; then
+		rm -rf $OUTDIR
+		mkdir $OUTDIR; mkdir $OUTDIR/Per_Gene
+	else
+		mkdir $OUTDIR; mkdir $OUTDIR/Per_Gene
+	fi
+	
+	#echo -n "scapture PAScall: estimate gene expression, and filter out gene without reads."; date
+	featureCounts -a $ANNO".genetype.gtf" -g transcript_id -Q 3 -s 1 -M -O --fraction -T 4 -o $PREFIX".featureCount.txt" $BAMFILE &> $PREFIX".featureCount.log"	
+	cat $PREFIX".featureCount.txt" | perl -alne 'if($#ARGV==0){next if $_ =~ /^#/ | $F[0] eq "Geneid"; @s=split(/\|/,$F[0]); $count{$F[0]}=$F[$#F];}else{ $c=0;$c=$count{$F[0]} if $count{$F[0]}; $,="\t"; print $c,@F; }' - $ANNO".genetype.txt" > $PREFIX".genetype.count.txt"
+	
+	#echo -n "scapture PAScall: create command line for transcript level peak calling."; date
+	perl -alne 'if($#ARGV==0){ @s=split(/\|/,$F[1]);$gene{$s[0]}+=$F[0];}else{$F[3]=~/(.+)\|(.+)/;$genename=$1; next unless $gene{$genename}; print " -g $genename --locus $F[0]:$F[1]-$F[2] -s $F[5]" if $gene{$genename} > 0;}' $PREFIX".genetype.count.txt" $ANNO".genetype.extended.bed" | parallel echo "scapture_callpeak -o "$OUTDIR"/Per_Gene/scapture -c "$PREFIX".genetype.count.txt -b "$BAMFILE" -l "$FragLength" --cs "$ANNO".chromsize -w "$PeakWidth" --overlap "$OverlapRatio {} > $PREFIX".CallPasPerGene.sh"
+	rm $PREFIX".featureCount.txt" $PREFIX".featureCount.txt.summary" $PREFIX".featureCount.log"	
+	
+	#echo $PREFIX".genetype.count.txt" $PREFIX".CallPasPerGene.sh"
+	wait
+	echo -n "scapture PAScall: create command line done. "; date
+	MODULE="PAScall2"
+fi
+
+if [ "$MODULE" == "PAScall2" ]; then
+	echo -n "scapture PAScall: peak calling. "; date
+	cat $PREFIX".CallPasPerGene.sh" | parallel -j $MEGAthread
+	wait
+	GeneList=$(perl -alne '@s=split(/\|/,$F[1]);$gene{"$s[0]"}+=$F[0]; END{for $g (keys %gene){print $g if $gene{$g} > 0;}}' $PREFIX".genetype.count.txt" )
+	wait
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peak.isoform.bed" &
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peak.isoform.normality.bed" &
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.aggregate.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.aggregate.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peak.isoform.normality.aggregate.bed" &
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peaks.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peaks.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peaks.bed" &
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.intronic.rawpeak.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.intronic.rawpeak.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".intronic.rawpeak.bed" &
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.intronic.peak.aggregate.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.intronic.peak.aggregate.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".intronic.peak.aggregate.bed" &
+	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.intronic.peaks.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.intronic.peaks.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".intronic.peaks.bed" &
+	wait
+	cp $OUTDIR/$PREFIX".exonic.peaks.bed" $PREFIX".exonic.peaks.bed"
+	cp $OUTDIR/$PREFIX".intronic.peaks.bed" $PREFIX".intronic.peaks.bed"
+	wait
+	echo -n "scapture PAScall: peak calling done. "; date
+	MODULE="PAScall3"
+fi
+
+if [ "$MODULE" == "PAScall3" ]; then
+	echo -n "scapture PAScall: peak annotating. "; date
+	#For exonic peaks, we annotated peak to transcript based on information of isoform splicing and distance to isoform terminal.
+	#Find transcript that is closest to peak. (number of transcript might ≥ 1, based on given annotation file)
+	ClosestIsoform=$(bedtools intersect -a $PREFIX".exonic.peaks.bed" -b $ANNO".genetype.bed" -f 1 -s -split -wo | perl -alne '$,="\t"; $F[3]=~/(.+)\|(\d+)/;$g1=$1; $F[15]=~/^(.+)\|(.+)\|(.+)/;$g2=$1; next if $g1 ne $g2; $d="NA";if($F[5] eq "+"){$d=$F[14]-$F[2];};if($F[5] eq "-"){$d=$F[1]-$F[13];}; $d = -$d if $d < 0;  print @F[0..11],$F[15],$d,$g1,$g2;' | sort -k4,4 -k14,14n | perl -alne '$,="\t";print $F[3],$F[12] unless $pas{$F[3]};$pas{$F[3]}=1;' | perl -alne 'if($#ARGV==0){$g{$F[3]}=$_;}else{ @s=split("\t",$g{$F[0]}); $s[3]="$s[3]|$F[1]"; $,="\t", print @s;  }' $PREFIX".exonic.peaks.bed" - )
+	#Find all closest transcripts matched peaks
+	MatchedIsoform=$(echo "$ClosestIsoform" | bedtools intersect -a - -b $ANNO".genetype.bed" -f 1 -s -split -wo | cut -f 1-12,16 | perl -alne 'BEGIN{$,="\t"; $a=join("\t",@F[0..11]);};  $F[3]=~/^(.+?)\|(\d+)\|exon/;$g1=$1;$F[$#F]=~/^(.+)\|(.+)\|(.+)/;$g2=$1; next if $g1 ne $g2;  $key=join("\t",@F[0..11]); $g{$key}="$F[$#F],$g{$key}";  if($key ne $a){ print $a,$g{$a}; $a=$key; }; END{print $key,$g{$key}};'| cut -f 4,13 )
+	#Annotated genomic element of peak by the location of terminal 10% region.
+	PeakTerminal=$(echo "$ClosestIsoform" | bedToGenePred /dev/stdin /dev/stdout | perl -alne ' $d=0;@s=split(",",$F[8]);@e=split(",",$F[9]); for($i=0;$i<$F[7];$i++){$d += ($e[$i]-$s[$i]);};    $startexon=0;$startdis=0;$dis = int($d/10);    if($F[2] eq "-"){for($i=0;$i<$F[7];$i++){ $dis -= ($e[$i]-$s[$i]); if($dis < 0){ $startdis = $dis; $startexon = $i; last;}; };};   if($F[2] eq "+"){$endexon=$F[7]-1;$enddis=0;$dis = int($d/10);for($i=$F[7]-1;$i>=0;$i--){ $dis -= ($e[$i]-$s[$i]); if($dis < 0){ $enddis = $dis ; $endexon = $i; last;}; };};  $,="\t"; if($F[2] eq "+"){  $F[3] = $s[$endexon] - $enddis; $s[$endexon] -= $enddis; print $F[0],$F[1],$F[2],$F[3],$F[4],$F[4],$F[4],$F[7]-$endexon,join(",",@s[$endexon..$#s]),join(",",@e[$endexon..$#e]); };  if($F[2] eq "-"){  $F[4] = $e[$startexon] + $startdis; $e[$startexon] += $startdis; print $F[0],$F[1],$F[2],$F[3],$F[4],$F[4],$F[4],$startexon+1,join(",",@s[0..$startexon]),join(",",@e[0..$startexon]); } '|  genePredToBed /dev/stdin /dev/stdout )
+	#Annotated genomic element based on order: 3UTR > exon > 5UTR > CDS
+	#Specifically, for transcripts without CDS of coding gene, the transcript region would be labbled as "exon".
+	#For lncRNA and other genes, the transcript region would also be labbled as "exon".
+	AnnotatedPeak=$(echo "$PeakTerminal" | bedtools intersect -a - -b $ANNO".element.txt" -s -split -wo | cut -f 4,16,17,19 | perl -alne 'if($#ARGV==0){$iso{$F[0]}=$F[1];}else{$,="\t"; @s=split(/\|/,$F[1]); print @F,$iso{$F[0]} if $iso{$F[0]} =~ /\|$s[2]/;}' <(echo "$MatchedIsoform") - | perl -alne 'BEGIN{$eleorder{"3UTR"}=1;$eleorder{"exon"}=2;$eleorder{"5UTR"}=3;$eleorder{"CDS"}=5;};  $F[0]=~/^(.+)\|(\d+)\|exon\|(.+)\|(.+)\|(.+)/; $pasiso=$5; $F[1]=~/(.+)\|(.+)\|(.+)/;$bediso=$3;   $pasele{$F[0]}=6 unless $pasele{$F[0]}; if($eleorder{$F[2]} < $pasele{$F[0]}){ $pas{$F[0]}=$_; $pasele{$F[0]} = $eleorder{$F[2]}; };   if($eleorder{$F[2]} == $pasele{$F[0]} & $pasiso eq $bediso){ $pas{$F[0]}=$_; $pasele{$F[0]} = $eleorder{$F[2]}; };    END{ $,="\t"; for $k (keys %pasele){ print $pas{$k}; }; }' | cut -f 1,2,3 | sort -k1,1)
+	echo "$AnnotatedPeak" | perl -alne 'if($#ARGV==0){ $g{$F[0]}=$F[1];$e{$F[0]}=$F[2];}else{ $gene = $g{$F[3]}; $ele = $e{$F[3]}; $F[3]=~/(.+)\|(\d+)\|exon\|(.+)\|(.+)\|(.+)/; $F[3]="$1|$2|$gene|$ele"; $,="\t"; print @F; }' - <(echo "$ClosestIsoform") | sort -k1,1 -k2,2n > $PREFIX".exonic.peaks.annotated.bed"
+
+	unset ClosestIsoform MatchedIsoform PeakTerminal AnnotatedPeak
+
+	#For intron and 3primeExtended peaks, we assigned same name field like exonic peaks. (gene_name|index_of_peaks|gene_name|gene_type|isoform|genomic_element)
+	#for intronic peaks
+	cat $PREFIX".intronic.peaks.bed" | perl -alne '@a=split(/\|/,$F[3]); print if $a[$#a] eq "intron"; ' | bedtools intersect -a - -b $ANNO".genetype.bed" -s -split -v | perl -alne 'if($#ARGV==0){@a=split(/\|/,$F[3]); $gt{$a[0]}=$a[1];}else{$,="\t";@a=split(/\|/,$F[3]);$F[3]="$a[0]|$a[1]|$a[0]|$gt{$a[0]}|null|intron"; print @F;}' $ANNO".genetype.bed" - | sort -k1,1 -k2,2n > $PREFIX".intronic.peaks.annotated.bed"
+	#for 3 prime extended peaks
+	cat $PREFIX".intronic.peaks.bed" | perl -alne '@s=split(/\|/,$F[3]); print if $s[$#s] eq "3primeExtended";' | perl -alne 'if($#ARGV==0){@s=split(/\|/,$F[3]);$gt{$s[0]}=$s[1];}else{@s=split(/\|/,$F[3]);$,="\t";$F[3]="$s[0]|$s[1]|$s[0]|$gt{$s[0]}|null|3primeExtended";print @F;}' $ANNO".genetype.bed" - | bedtools intersect -a - -b $ANNO".genetype.bed" -s -split -wao | perl -alne '$,="\t";if($F[$#F] == 0 & $F[$#F-1] eq "."){print @F[0..11];}else{@s1=split(/\|/,$F[3]);@s2=split(/\|/,$F[15]); print @F[0..11] if $s1[0] eq $s2[0];};' | sort -k1,1 -k2,2n -u > $PREFIX".3primeExtended.peaks.annotated.bed"
+
+	#echo $PREFIX".exonic.peaks.annotated.bed" $PREFIX".intronic.peaks.annotated.bed" $PREFIX".3primeExtended.peaks.annotated.bed"
+	echo -n "scapture PAScall: peak annotating done. "; date
+	wait
+	MODULE="PAScall4"
+fi
+
+if [ "$MODULE" == "PAScall4" ]; then
+	echo -n "scapture PAScall: PAS evaluating. "; date
+#	echo "exon DeepPASS"
+#	echo "scapture_evaluate --peak $PREFIX".exonic.peaks.annotated.bed" -o $PREFIX".exonic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH "
+	scapture_evaluate --peak $PREFIX".exonic.peaks.annotated.bed" -o $PREFIX".exonic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
+#	echo "intron DeepPASS"
+#	echo "scapture_evaluate --peak $PREFIX".intronic.peaks.annotated.bed" -o $PREFIX".intronic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH "
+	scapture_evaluate --peak $PREFIX".intronic.peaks.annotated.bed" -o $PREFIX".intronic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
+#	echo "3primeExtended DeepPASS"
+#	echo "scapture_evaluate --peak $PREFIX".3primeExtended.peaks.annotated.bed" -o $PREFIX".3primeExtended.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH"
+	scapture_evaluate --peak $PREFIX".3primeExtended.peaks.annotated.bed" -o $PREFIX".3primeExtended.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
+	echo "scapture PAScall: output files -- " $PREFIX".exonic.peaks.evaluated.bed" $PREFIX".intronic.peaks.evaluated.bed" $PREFIX".3primeExtended.peaks.evaluated.bed"
+	echo -n "scapture PAScall: PAS evaluating done. "; date
+	wait
+fi
+
+if [ "$MODULE" == "PASmerge" ]; then
+	echo "scapture path: "$SCAPTUREPATH
+	echo "scapture module: "$MODULE
+	echo "Output prefix: "$PREFIX
+	if [[ "$PeakList" != "NULL" && "$RawPeakList" == "NULL" ]]; then echo "evaluated peak list: "$PeakList; fi
+	if [[ "$PeakList" == "NULL" && "$RawPeakList" != "NULL" ]]; then echo "raw peak list: "$RawPeakList; fi
+	#combine multiple sample
+	if [[ "$PeakList" == "NULL" && "$RawPeakList" != "NULL" ]]; then
+		scapture_mergesample -o $PREFIX --rawpeak $RawPeakList
+	elif [[ "$PeakList" != "NULL" && "$RawPeakList" == "NULL" ]]; then
+		scapture_mergesample -o $PREFIX --peak $PeakList
+	else
+		echo "error in input peak list file parameter!"
+		exit 1
+	fi
+	wait
+fi
+
+if [ "$MODULE" == "PASquant" ]; then
+	echo "scapture path: "$SCAPTUREPATH
+	echo "scapture module: "$MODULE
+	echo "Output prefix: "$PREFIX
+	echo "BAM file: "$BAMFILE
+	echo "PAS peaks: "$PAS
+	if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then echo "Cell list: "$CellList; fi
+	if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then echo "Cell type list: "$CellType; echo "Convert BAM to BW: "$ConvertBW; fi
+
+	if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
+		#echo "scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celllist $CellList"
+		scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celllist $CellList
+	elif [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
+		#echo "scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celltype $CellType --bw $ConvertBW -p $MEGAthread"
+		scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celltype $CellType --bw $ConvertBW -p $MEGAthread
+	else
+		echo "error in input cell file parameter!"
+		exit 1
+	fi
+fi

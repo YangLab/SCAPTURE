@@ -1,0 +1,109 @@
+#!/bin/bash
+helpdoc(){
+    cat <<EOF
+Description:
+	SCAPRUTE module: peak evaluating
+
+Usage:
+    scapture_mergesample [options]
+    -h/---help  -- help information
+    
+Parameters passed from SCAPRUTE:
+ -o          -- Prefix of output file
+ --peak      -- list of evaluated peak files to merge 
+                (one sample per line, split by tab,
+                 1st col: "Sample_name",
+                 2cd col: "PathofEvaluatedPeakFile" )
+ --rawpeak   -- raw peak files to merge (Restricted by --peak)
+ --path      -- path of scapture suite (ignore if scapture in PATH)
+ -h/---help  -- help information
+
+Version: 1.0 2021/01/25
+
+Author: Guo-Wei Li Email: liguowei@picb.ac.cn
+EOF
+}
+
+if [ $# = 0 ]
+then
+    helpdoc
+    exit 1
+fi
+
+PeakList="NULL"
+RawPeakList="NULL"
+
+ARGS=`getopt -o o:h --long peak:,path:,rawpeak:,help  -- "$@"`
+eval set -- "$ARGS"
+while true ; do
+	case "$1" in
+		-o) PREFIX=$2 ; shift 2;;
+		--peak) PeakList=$2 ; shift 2;;
+		--path) SCAPTUREPATH=$2 ; shift 2;;
+		--rawpeak) RawPeakList=$2 ; shift 2;;
+		-h) helpdoc ; exit 1;;
+		--help) helpdoc ; exit 1;;
+		--)
+			shift
+			break
+			;;
+		*) echo "unknown parameter:" $1; helpdoc; exit 1;;
+	esac
+done
+
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+
+#check parameters:
+PeakFileList=""
+if [[ "$PeakList" == "NULL" && "$RawPeakList" != "NULL" ]]; then
+	PeakFileList=$RawPeakList
+	if [ ! -e "$RawPeakList" ]; then echo "Raw peak list file dosn't exisits! exit !"; exit 1; fi;
+elif [[ "$PeakList" != "NULL" && "$RawPeakList" == "NULL" ]]; then
+	PeakFileList=$PeakList
+	if [ ! -e "$PeakList" ]; then echo "Peak list file dosn't exisits! exit !"; exit 1; fi;
+else
+	echo "error in input peak list file parameter!"
+	exit 1
+fi
+
+
+#Label sample in name field, then cat peaks from samples together
+PeakCombine=$(cat $PeakFileList | parallel -j 1 --colsep="\t" perl -alne \''$F[3]="$F[3]|{1}";$,="\t";print @F;'\' {2} | sort -k1,1 -k2,2n)
+
+#extract center region (60%) of peaks to perform overlap analysis
+PeakCentre=$( echo "$PeakCombine" | bedToGenePred /dev/stdin /dev/stdout | perl -alne '$r=0.6;  $ratio=int(1/((1-$r)/2)); $d=0;@s=split(",",$F[8]);@e=split(",",$F[9]); for($i=0;$i<$F[7];$i++){$d += ($e[$i]-$s[$i]);};    $startexon=0;$startdis=0;$dis = int($d/$ratio);for($i=0;$i<$F[7];$i++){ $dis -= ($e[$i]-$s[$i]); if($dis < 0){ $startdis = $e[$i] - $s[$i] + $dis; $startexon = $i+1; last;}; };   $endexon=$F[7]-1;$enddis=0;$dis = int($d/$ratio);for($i=$F[7]-1;$i>=0;$i--){ $dis -= ($e[$i]-$s[$i]); if($dis < 0){ $enddis = $e[$i] - $s[$i] + $dis; $endexon = $i + 1;last;}; };  $,="\t"; $s[$startexon-1] += $startdis; $e[$endexon-1] -= $enddis; print $F[0],$F[1],$F[2],$s[$startexon-1],$e[$endexon-1],$e[$endexon-1],$e[$endexon-1],$endexon-$startexon+1,join(",",@s[$startexon-1..$endexon-1]),join(",",@e[$startexon-1..$endexon-1]);' | genePredToBed /dev/stdin /dev/stdout)
+echo "$PeakCentre" > $PREFIX".peakcenter.bed"
+
+#assign identical ID to peaks with overlapped center region.
+PeakCentrOverlap=$(bedtools intersect -a $PREFIX".peakcenter.bed" -b $PREFIX".peakcenter.bed" -s -split -f 0.6 -wao | perl -alne '@a=split(/\|/,$F[3]);@b=split(/\|/,$F[15]);next if $a[0] ne $b[0];print;' | sort -k4,4 -k16,16 | perl -alne 'BEGIN{$,="\t";$n=1;$m=0;}; $m++; $a=$F[3];$b=$F[15]; $g{$F[3]}=join("\t",@F[0..11]);$g{$F[15]}=join("\t",@F[12..23]); if($m==1){$c{$a}=$n;$c{$b}=$n;next;}; if( $c{$a} && $c{$b} ){ next; }; if( !$c{$a} && $c{$b} ){ $c{$a}=$c{$b};next; }; if( $c{$a} && !$c{$b} ){ $c{$b}=$c{$a};next; }; if( !$c{$a} && !$c{b} ){ $n++; $c{$a}=$n;$c{$b}=$n;next; };  END{for $k (keys %c){print $g{$k},$c{$k}};}' | sort -k13,13n -k1,1 -k2,2n)
+PeakOverlap=$(echo "$PeakCentrOverlap" | perl -alne 'if($#ARGV==0){$g{$F[3]}=$F[12];}else{$,="\t";print @F,$g{$F[3]};}' - <(echo "$PeakCombine" ) | sort -k1,1 -k2,2n)
+PeakOverlapNum=$(perl -alne 'if($#ARGV==0){$n{$F[$#F]}+=1;}else{$,="\t"; @a=split(/\|/,$F[3]); print @F,$n{$F[$#F]};}' <(echo "$PeakOverlap") <(echo "$PeakOverlap") | sort -k1,1 -k2,2n)
+
+if [[ "$PeakList" == "NULL" && "$RawPeakList" != "NULL" ]]; then
+	#only output assigment of total peaks from all samples (raw peaks without evaluation)
+	echo "$PeakOverlapNum" > $PREFIX".IntegratedSamples.bed"
+	#echo $PREFIX".IntegratedSamples.bed"
+elif [[ "$PeakList" != "NULL" && "$RawPeakList" == "NULL" ]]; then
+	echo "$PeakOverlapNum" > $PREFIX".IntegratedSamples.bed"
+	#sort the order of peak with identical id (-k15,15n), then select peaks by priority of poly(a) database annotating (-k13,13nr) and then DeepPASS prediction (-k14,14r).
+	echo "$PeakOverlapNum" | sort -k15,15n -k13,13nr -k14,14r | perl -alne '$,="\t";print @F[0..$#F-2] unless $id{$F[$#F-1]}; $id{$F[$#F-1]}=1;' | sort -k1,1 -k2,2n > $PREFIX".Integrated.bed"
+	#echo $PREFIX".IntegratedSamples.bed" $PREFIX".Integrated.bed"
+else
+	echo "error in input peak list file parameter!"
+	unset PeakCombine PeakCentre PeakCentrOverlap PeakOverlap PeakOverlapNum
+	rm $PREFIX".peakcenter.bed"
+	exit 1
+fi
+#remove temp files
+unset PeakCombine PeakCentre PeakCentrOverlap PeakOverlap PeakOverlapNum
+rm $PREFIX".peakcenter.bed"

@@ -1,0 +1,179 @@
+#!/bin/bash
+helpdoc(){
+    cat <<EOF
+Description:
+	SCAPRUTE module: PASquant
+
+Usage:
+    scapture_quant [options]
+    -h/---help  -- help information
+    
+Options:
+ -o          -- output prefix
+ -b          -- Cell Ranger aligned BAM file.
+ --pas       -- PASs peaks file to quantify.
+ --celllist  -- Cell barcode as white list to count UMIs.
+ --celltype  -- Cell type annotation file
+                (tab split, 
+                1st col: "cell_barcode",
+                2cd col: "cell_type" ).
+ --bw        -- generate bigwiggle file for each
+                cell type in --celltype option
+                (true, false, default: false)
+  -p          -- number of threads. (default: 4)
+  
+Version: 1.0 2021/01/25
+
+Author: Guo-Wei Li Email: liguowei@picb.ac.cn
+EOF
+}
+
+if [ $# = 0 ]; then
+    helpdoc
+    exit 1
+fi
+
+#Clear options:
+unset BAMFile PREFIX Thread PAS CellList CellType ConvertBW
+
+#default options:
+ConvertBW="false"
+CellList="NULL"
+CellType="NULL"
+Thread=4
+
+#get command line parameters
+ARGS=`getopt -o o:b:p:h --long pas:,celllist:,celltype:,bw:,help  -- "$@"`
+eval set -- "$ARGS"
+while true ; do
+	case "$1" in
+		-b) BAMFile=$2 ; shift 2;;
+		-o) PREFIX=$2 ; shift 2;;
+		-p) Thread=$2 ; shift 2;;
+		--pas) PAS=$2 ; shift 2;;
+		--celllist) CellList=$2 ; shift 2;;
+		--celltype) CellType=$2 ; shift 2;;
+		--bw) ConvertBW=$2 ; shift 2;;
+		-h) helpdoc ; exit 1;;
+		--help) helpdoc ; exit 1;;
+		--)
+			shift
+			break
+			;;
+		*) echo "unknown parameter:" $1; helpdoc; exit 1;;
+	esac
+done
+
+#check parameters:
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+if [ ! -e "$BAMFile" ]; then echo $BAMFile" dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$PAS" ]; then echo $PAS" dosn't exisits! exit !"; exit 1; fi;
+
+CellInfor=""
+CellIdentity=""
+if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
+	if [ ! -e "$CellType" ]; then echo $CellType" dosn't exisits! exit !"; exit 1; fi;
+	CellInfor=$(cat $CellType)
+	CellIdentity=$(echo "$CellInfor" | cut -f 2 | sort -u )
+elif [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
+	if [ ! -e "$CellList" ]; then echo $CellList" dosn't exisits! exit !"; exit 1; fi;
+	CellInfor=$(cat $CellList)
+else
+	echo "error in input cell file parameter!"
+	exit 1
+fi
+
+
+#echo -n "PASquant Step1: prepare GTF file from input PAS peak BED file. "; date
+#filter PAS overlap in redundant annotation of genes
+bedtools intersect -a $PAS -b $PAS -s -split -f 0.3 -wo | perl -alne '$n1=3;$n2=15; @s1=split(/\|/,$F[$n1]);@s2=split(/\|/,$F[$n2]);  next if $s1[0] eq $s2[0]; if( $s1[0] =~ /^A\W\d+\.\d+$/ & $s2[0] !~ /^A\W\d+\.\d+$/ ){print $F[$n1];};if( $s1[0] !~ /^A\W\d+\.\d+/ & $s2[0] =~ /^A\W\d+\.\d+/ ){print $F[$n2];};  if( $s1[0] !~ /^A\W\d+\.\d+$/ & $s2[0] !~ /^A\W\d+\.\d+$/ ){  if( $s1[0] =~ /\-$s2[0]/ | $s1[0] =~ /$s2[0]\-/ ){print $F[$n1];};if( $s2[0] =~ /\-$s1[0]/ | $s2[0] =~ /$s1[0]\-/ ){print $F[$n2];}; }; ' | perl -alne 'if($#ARGV==0){$g{$F[0]}=1;}else{next if $g{$F[$n1]};print;}' - $PAS | sort -k3,3 -k1,1 -k2,2n | perl -alne '$,="\t"; @s=split(/\|/,$F[3]); $gene{$s[0]}++; print @F[0..2],"$s[0]-$gene{$s[0]}",@F[4..11],split(/\|/,$F[3]);' | sort -k1,1 -k2,2n > $PREFIX".KeepPAS.metadata"
+cut -f 1-12 $PREFIX".KeepPAS.metadata" > $PREFIX".KeepPAS.bed"
+cat $PREFIX".KeepPAS.bed" | perl -alne '$F[6]=$F[2];$F[7]=$F[2];$,="\t";print @F[0..11];' | bedToGenePred /dev/stdin /dev/stdout | genePredToGtf file /dev/stdin /dev/stdout | perl -alne '$s=$_;$s=~s/\/dev\/stdin/SCAPTURE/;print $s;' > $PREFIX".KeepPAS.gtf"
+echo "scapture PASquant -- " $PREFIX".KeepPAS.metadata" $PREFIX".KeepPAS.bed"
+#echo "PASquant Step1: done. "; date
+
+
+if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
+
+	#echo -n "PASquant Step2: filter BAM by given cells. "; date
+	echo "$CellInfor" > $PREFIX".KeepCell.txt"
+	FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.bam" SUMMARY=$PREFIX".KeepCell.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.txt" &> $PREFIX".KeepCell.FilterBam.log"
+	samtools view -bh $PREFIX".KeepCell.bam" | samtools sort -@ 4 - -o $PREFIX".KeepCell.srt.bam" &> /dev/null
+	samtools index $PREFIX".KeepCell.srt.bam"
+	rm $PREFIX".KeepCell.bam"
+	#echo -n "PASquant Step2: done. "; date
+	
+	#echo -n "PASquant Step3: re-assign reads to PASs. "; date
+	featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
+	samtools sort -@ 4 $PREFIX".KeepCell.srt.bam.featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
+	samtools index $PREFIX".KeepCell.reassigned.bam"
+	rm $PREFIX".KeepCell.srt.bam.featureCounts.bam" $PREFIX".KeepCell.srt.bam" $PREFIX".KeepCell.srt.bam.bai"
+	#echo -n "PASquant Step3: done. "; date
+	
+	#echo -n "PASquant Step4: count UMIs for PASs. "; date
+	umi_tools count --extract-umi-method=tag --umi-tag=UB --cell-tag=CB --per-gene --gene-tag=XT --assigned-status-tag=XS --per-cell --wide-format-cell-counts -I $PREFIX".KeepCell.reassigned.bam" -S $PREFIX".KeepCell.UMItools.tsv.gz" -E $PREFIX".KeepCell.UMItools.error.log" -L $PREFIX".KeepCell.UMItools.logging.log"
+	zcat $PREFIX".KeepCell.UMItools.tsv.gz" | perl -alne ' if($#ARGV==0){push @allgene,$F[3];$allgenekey{$F[3]}=1;}else{ if($allgenekey{$F[0]} != 1 & $F[0] ne "gene"){ push @allgene,$F[0]; }; @cell = @F[1..$#F] if $F[0] eq "gene"; $expressed{$F[0]}=join("\t",@F[1..$#F]) if $F[0] ne "gene";}; END{ $,="\t";print @cell; for($i=0;$i<=$#allgene;$i++){ $g=substr("0\t"x($#cell+1),0,-1) unless $expressed{$allgene[$i]}; $g=$expressed{$allgene[$i]} if $expressed{$allgene[$i]}; $,="\t"; print $allgene[$i],$g;}}' $PREFIX".KeepPAS.bed" - | gzip -c - > $PREFIX".KeepCell.formatted.tsv.gz"
+	Rscript $SCAPTUREPATH"/scripts/Average_overlap_PAS.R" $PREFIX".KeepCell.formatted.tsv.gz" $PREFIX".KeepCell.allPAS.tsv"
+	zcat $PREFIX".KeepCell.allPAS.tsv.gz" | perl -alne ' if($#ARGV==0){push @allgene,$F[3];}else{$count++; @cell = @F[0..$#F] if $count == 1; $expressed{$F[0]}=join("\t",@F[1..$#F]) if $count > 1;}; END{ $,="\t";print "gene",@cell; for($i=0;$i<=$#allgene;$i++){ $g=substr("0\t"x($#cell+1),0,-1) unless $expressed{$allgene[$i]}; $g=$expressed{$allgene[$i]} if $expressed{$allgene[$i]}; $,="\t"; print $allgene[$i],$g;} }' $PREFIX".KeepPAS.bed" - | gzip -c - > $PREFIX".KeepCell.UMIs.tsv.gz"
+	echo "scapture PASquant -- " $PREFIX".KeepCell.UMIs.tsv.gz"
+	rm $PREFIX".KeepPAS.gtf" $PREFIX".KeepCell.txt" $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.assigned.summary"
+	rm $PREFIX".KeepCell.UMItools.tsv.gz" $PREFIX".KeepCell.formatted.tsv.gz" $PREFIX".KeepCell.allPAS.tsv.gz" 
+	#echo -n "PASquant Step4: done. "; date
+fi
+
+if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
+	#echo -n "PASquant Step2: filter BAM by given cell types. "; date
+	echo "$CellIdentity" | parallel perl \'-F'\t' -alne '$,="\t";print $F[0] if $F[1] eq "{}";'\' $CellType ">" $PREFIX".KeepCell.{}.txt"
+	echo "$CellIdentity" | parallel -j $Thread FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.{}.bam" SUMMARY=$PREFIX".KeepCell.{}.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.{}.txt" "&>" $PREFIX".KeepCell.{}.FilterBam.log"
+	echo "$CellIdentity" | parallel -j $Thread samtools view -bh $PREFIX".KeepCell.{}.bam" "|" samtools sort -@ 4 - -o $PREFIX".KeepCell.{}.srt.bam" "&>" /dev/null
+	echo "$CellIdentity" | parallel -j $Thread samtools index $PREFIX".KeepCell.{}.srt.bam"
+	echo "$CellIdentity" | parallel -j $Thread rm $PREFIX".KeepCell.{}.bam"
+	wait
+	#echo -n "PASquant Step2: done. "; date
+	#sleep 10s
+	#echo -n "PASquant Step3: re-assign reads to PASs. "; date
+	echo "$CellIdentity" | parallel -j $Thread featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.{}.assigned" $PREFIX".KeepCell.{}.srt.bam" "&>" /dev/null
+	echo "$CellIdentity" | parallel -j $Thread samtools sort -@ 4 $PREFIX".KeepCell.{}.srt.bam.featureCounts.bam" -o $PREFIX".KeepCell.{}.reassigned.bam" "&>" /dev/null
+	echo "$CellIdentity" | parallel -j $Thread samtools index $PREFIX".KeepCell.{}.reassigned.bam"
+	echo "$CellIdentity" | parallel -j $Thread rm $PREFIX".KeepCell.{}.srt.bam.featureCounts.bam" $PREFIX".KeepCell.{}.srt.bam" $PREFIX".KeepCell.{}.srt.bam.bai"
+	wait
+	#echo -n "PASquant Step3: done. "; date
+	#sleep 10s
+	#echo -n "PASquant Step4: count UMIs for PASs. "; date
+	echo "$CellIdentity" | parallel -j $Thread umi_tools count --extract-umi-method=tag --umi-tag=UB --cell-tag=CB --per-gene --gene-tag=XT --assigned-status-tag=XS --per-cell --wide-format-cell-counts -I $PREFIX".KeepCell.{}.reassigned.bam" -S $PREFIX".KeepCell.{}.UMItools.tsv.gz" -E $PREFIX".KeepCell.{}.UMItools.error.log" -L $PREFIX".KeepCell.{}.UMItools.logging.log"
+	echo "$CellIdentity" | parallel -j $Thread zcat $PREFIX".KeepCell.{}.UMItools.tsv.gz" "|" perl -alne \''if($#ARGV==0){push @allgene,$F[3];$allgenekey{$F[3]}=1;}else{ if($allgenekey{$F[0]} != 1 & $F[0] ne "gene"){ push @allgene,$F[0]; }; @cell = @F[1..$#F] if $F[0] eq "gene"; $expressed{$F[0]}=join("\t",@F[1..$#F]) if $F[0] ne "gene";}; END{ $,="\t";print @cell; for($i=0;$i<=$#allgene;$i++){ $g=substr("0\t"x($#cell+1),0,-1) unless $expressed{$allgene[$i]}; $g=$expressed{$allgene[$i]} if $expressed{$allgene[$i]}; $,="\t"; print $allgene[$i],$g;}}'\' $PREFIX".KeepPAS.bed" - "|" gzip -c - ">" $PREFIX".KeepCell.{}.formatted.tsv.gz"
+	echo "$CellIdentity" | parallel -j $Thread Rscript $SCAPTUREPATH"/scripts/Average_overlap_PAS.R" $PREFIX".KeepCell.{}.formatted.tsv.gz" $PREFIX".KeepCell.{}.allPAS.tsv"
+	echo "$CellIdentity" | parallel -j $Thread zcat $PREFIX".KeepCell.{}.allPAS.tsv.gz" "|" perl -alne \''if($#ARGV==0){push @allgene,$F[3];}else{$count++; @cell = @F[0..$#F] if $count == 1; $expressed{$F[0]}=join("\t",@F[1..$#F]) if $count > 1;}; END{ $,="\t";print "gene",@cell; for($i=0;$i<=$#allgene;$i++){ $g=substr("0\t"x($#cell+1),0,-1) unless $expressed{$allgene[$i]}; $g=$expressed{$allgene[$i]} if $expressed{$allgene[$i]}; $,="\t"; print $allgene[$i],$g;} }'\' $PREFIX".KeepPAS.bed" - "|" gzip -c - ">" $PREFIX".KeepCell.{}.UMIs.tsv.gz"
+	export PREFIX
+	echo "$CellIdentity" | perl -ane '$n++; print "paste <( zcat $ENV{PREFIX}.KeepCell.$F[0].UMIs.tsv.gz ) " if $n == 1;  print " <( zcat $ENV{PREFIX}.KeepCell.$F[0].UMIs.tsv.gz | cut -f 2- ) " if $n > 1; ;' | bash | gzip -c - > $PREFIX".KeepCell.UMIs.tsv.gz"
+	echo "$CellIdentity" | parallel -j $Thread rm $PREFIX".KeepCell.{}.UMItools.tsv.gz" $PREFIX".KeepCell.{}.formatted.tsv.gz" $PREFIX".KeepCell.{}.allPAS.tsv.gz"	
+	wait
+	#echo -n "PASquant Step4: done. "; date
+	#sleep 10s
+	echo "scapture PASquant -- " $PREFIX".KeepCell.UMIs.tsv.gz"
+	echo "scapture PASquant -- PAS UMI count matrix per cell type:	"
+	echo "$CellIdentity" | parallel -j 1 echo $PREFIX".KeepCell.{}.UMIs.tsv.gz	"$PREFIX".KeepCell.{}.reassigned.bam"
+	wait
+	rm $PREFIX".KeepPAS.gtf"
+	echo "$CellIdentity" | parallel rm $PREFIX".KeepCell.{}.txt" $PREFIX".KeepCell.{}.assigned" $PREFIX".KeepCell.{}.assigned.summary"
+	wait
+	#sleep 10s
+	if [ "$ConvertBW" == "true" ]; then
+		echo "Start to convert BAM to BW file. This step might take a while..."
+		echo "$CellIdentity" | parallel -j $Thread $SCAPTUREPATH"/scripts/bamToBw.py" -d -b $PREFIX".KeepCell.{}.reassigned.bam" "&>" /dev/null
+		echo "$CellIdentity" | parallel -j $Thread rm $PREFIX".KeepCell.{}.reassigned.PLUS.bam" $PREFIX".KeepCell.{}.reassigned.MINUS.bam"
+		echo "Convert BAM to BW done!"
+	fi
+	unset CellIdentity CellInfor
+	wait
+fi

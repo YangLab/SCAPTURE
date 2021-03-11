@@ -1,0 +1,237 @@
+#!/bin/bash
+helpdoc(){
+    cat <<EOF
+Description:
+	SCAPRUTE module: peaks calling
+
+Usage:
+    scapture_callpeak [options]
+    -h/---help  -- help information
+    
+Parameters passed from SCAPRUTE:
+ -c          -- counted genepref files from SCAPTURE
+ -b          -- Cell Ranger aligned BAM file
+ -l          -- Read length of sequenceing cDNA in scRNA-seq
+ -g          -- symbol of gene (gene_name)
+ -s          -- strand of gene
+ -w          -- width of poly(A) peaks
+ -o          -- Read length of sequenceing cDNA in scRNA-seq
+ --locus     -- locus of gene
+ --overlap   -- overlapped ratio of exonic peaks to merge
+ --cs        -- chrom size file
+ -h/---help  -- help information
+
+Version: 1.0 2021/01/25
+
+Author: Guo-Wei Li Email: liguowei@picb.ac.cn
+EOF
+}
+
+if [ $# = 0 ]
+then
+    helpdoc
+    exit 1
+fi
+
+ARGS=`getopt -o c:b:l:o:g:s:w:h --long locus:,overlap:,cs:,help  -- "$@"`
+eval set -- "$ARGS"
+while true ; do
+	case "$1" in
+		-c) CountGenepred=$2 ; shift 2;;
+		-b) BAM=$2 ; shift 2;;
+		-l) FragLength=$2 ; shift 2;;
+		-g) GeneName=$2 ; shift 2;;
+		-s) Strand=$2 ; shift 2;;
+		-w) PeakWidth=$2 ; shift 2;;
+		-o) PREFIX=$2; shift 2;;
+		--locus) Locus=$2 ; shift 2;;
+		--overlap) OverlapRatio=$2 ; shift 2;;
+		--cs) Chromsize=$2 ; shift 2;;
+		-h) helpdoc ; exit 1;;
+		--help) helpdoc ; exit 1;;
+		--)
+			shift
+			break
+			;;
+		*) echo "unknown parameter:" $1; helpdoc; exit 1;;
+	esac
+done
+
+#bedtools v2.28.0
+#samtools 1.9
+#Using htslib 1.9
+<<'COMMENT'
+echo "CountGenepred: $CountGenepred
+BAM: $BAM
+FragLength: $FragLength
+GENE: $GeneName
+Strand: $Strand
+PeakWidth: $PeakWidth
+PREFIX: $PREFIX
+Locus: $Locus
+OverlapRatio: $OverlapRatio
+Chromsize: $Chromsize"
+COMMENT
+
+#check parameters:
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+if [ ! -e "$CountGenepred" ]; then echo $CountGenepred" dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$BAM" ]; then echo $BAM" dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$Chromsize" ]; then echo $Chromsize" dosn't exisits! exit !"; exit 1; fi;
+if [ "$FragLength" == "" ]; then echo "Require FragLength option! exit !"; exit 1; fi;
+if [ "$GeneName" == "" ]; then echo "Require GENE option! exit !"; exit 1; fi;
+if [ "$Strand" == "" ]; then echo "Require Strand option! exit !"; exit 1; fi;
+if [ "$PeakWidth" == "" ]; then echo "Require PeakWidth option! exit !"; exit 1; fi;
+if [ "$Locus" == "" ]; then echo "Require locus option! exit !"; exit 1; fi;
+if [ "$OverlapRatio" == "" ]; then echo "Require overlap option! exit !"; exit 1; fi;
+
+#echo "scapture_callpeak: prepare transcript annotation files and gene level BAM file ("$PREFIX"."$GeneName")"
+clearTempFiles(){
+	rm -f $1"."$2".expressed.txt" $1"."$2".bam" $1"."$2".bam.bai" $1"."$2".txt" $1"."$2".cov"
+	rm -f $1"."$2".keepisoform" $1"."$2".peak.txt" $1"."$2".peak.bed" $1"."$2".exonic.peak.isoform.aggregate.express"
+	cut -f 4 $1"."$2".bed" | parallel -j 1 rm -f -r $1"."$2"_{}.genepred" $1"."$2"_{}.cov" $1"."$2"_{}.homer" $1"."$2"_{}.peak.txt" $1"."$2"_{}.peak.modified.txt" $1"."$2"_{}.peak.modified.Pvalue.txt"
+	rm -f $1"."$2".bed"
+}
+#echo "scapture_callpeak: 1. filter transcript annotation with low read counts"
+export Strand
+export GeneName
+perl -alne '@s=split(/\|/,$F[1]); next if $s[0] ne "$ENV{GeneName}"; $F[1]=$s[2]; $,="\t"; print @F;' $CountGenepred > $PREFIX"."$GeneName".expressed.txt"
+sort -k1,1gr $PREFIX"."$GeneName".expressed.txt" | perl -alne 'print "$F[1]\t$F[0]";' | perl -alne '$ratio = 0.98; $n+=$F[1];push @all,$_;END{ for($i=0;$i<=$#all;$i++){ $,="\t"; @s=split("\t",$all[$i]);$l += $s[1];$ls=$l-$s[1]; if( $l/$n <= $ratio | ($ls/$n <= $ratio & $l/$n >= $ratio) | $i == 0 ){print @s;}; }  }' | cut -f 1 | perl -alne 'if($#ARGV==0){$g{$F[0]}=1;}else{print if $g{$F[1]};}' - $PREFIX"."$GeneName".expressed.txt" | cut -f 2- > $PREFIX"."$GeneName".txt"
+genePredToBed $PREFIX"."$GeneName".txt" /dev/stdout | sort -k1,1 -k2,2n > $PREFIX"."$GeneName".bed"
+#echo "scapture_callpeak: 2. generate Stranded gene level BAM file. For 10x Chromium library, Strandness of cDNA reads are concordant with Strandness of reference gene."
+if [ "$Strand" =  "+" ]; then
+	samtools view -bh -F 0x10 -q 3 $BAM $Locus > $PREFIX"."$GeneName".bam" ; samtools index $PREFIX"."$GeneName".bam"
+else
+	samtools view -bh -f 0x10 -q 3 $BAM $Locus > $PREFIX"."$GeneName".bam" ; samtools index $PREFIX"."$GeneName".bam"
+fi
+
+#echo "scapture_callpeak: Step2: transcript level exonic peak calling with HOMER ("$PREFIX"."$GeneName")"
+#echo "scapture_callpeak: 1. extract read coverage on transcript body"
+bedtools intersect -a $PREFIX"."$GeneName".bam" -b $PREFIX"."$GeneName".bed" -split -f 0.95 -u -bed | bedtools bedtobam -i - -bed12 -g $Chromsize | samtools depth -d 0 - >  $PREFIX"."$GeneName".cov"
+perl -alne 'print "$F[0]\t\t\t$_";' $PREFIX"."$GeneName".txt" | parallel -j 1 --colsep="\t\t\t" echo {2} ">" $PREFIX"."$GeneName"_{1}.genepred"
+cut -f 4 $PREFIX"."$GeneName".bed" | parallel perl -alne \''$,="\t";if($#ARGV==0){$p=$F[1]-1;$d{$p}=$F[2];}else{@s=split(",",$F[8]);@e=split(",",$F[9]); $l=0; for($i=0;$i<=$#s;$i++){for($j=$s[$i];$j<$e[$i];$j++){print $F[1],$l,$l+1,"$j",$d{$j},$F[2] if $d{$j};print $F[1],$l,$l+1,"$j",0,$F[2] unless $d{$j};$l++;}} };'\' $PREFIX"."$GeneName".cov" $PREFIX"."$GeneName"_{}.genepred" ">" $PREFIX"."$GeneName"_{}.cov"
+
+#echo "scapture_callpeak: 2. peak calling for each transcript with HOMER"
+cut -f 4 $PREFIX"."$GeneName".bed" | parallel -j 1 makeTagDirectory $PREFIX"."$GeneName"_{}.homer" $PREFIX"."$GeneName"_{}.cov" -format bed -force5th -fragLength $FragLength &> /dev/null
+cut -f 4 $PREFIX"."$GeneName".bed" | parallel -j 1 perl -alne \''$n++;$m+=$F[4]; END{$,="\t";print "{}",int($m/$n*200),$n;}'\' $PREFIX"."$GeneName"_{}.cov" | parallel -j 1 --colsep="\t" findPeaks $PREFIX"."$GeneName"_{1}.homer" -size $PeakWidth -minDist 10 -gsize {3} -strand separate -tagThreshold {2} -F 0 -L 0 -C 0 -o $PREFIX"."$GeneName"_{1}.peak.txt" &> /dev/null
+cut -f 4 $PREFIX"."$GeneName".bed" | parallel -j 1 "if [" -f $PREFIX"."$GeneName"_{}.peak.txt" "];" then perl -alne \''BEGIN{$n=0}; next if $_=~/^#/; $n++; END{ $,="\t"; print "{}" if $n > 0; };'\' $PREFIX"."$GeneName"_{}.peak.txt" ";" fi > $PREFIX"."$GeneName".keepisoform"
+#echo "scapture_callpeak: Skip gene without peaks called by HOMER"
+PEAKNUM=$(cat $PREFIX"."$GeneName".keepisoform" | wc -l); if [ $PEAKNUM -eq 0 ]; then clearTempFiles $PREFIX $GeneName; exit 1; fi;
+
+#echo "scapture_callpeak: 3. adjust position of called peaks based on extreme point of read coverage"
+cat $PREFIX"."$GeneName".keepisoform" | parallel -j 1 perl -MList::Util=sum -alne \''if($#ARGV==0){push @cov,$F[4];}else{ if($_ =~ /# genome size = (\d+)/){$gs=$1;} if($_=~/^#/){next;}; $distant=$F[3]-$F[2]; $d=int(($F[3]-$F[2])/10); $c=0;$l=$F[2]; for($i=$F[2];$i<=$F[3];$i+=10){ $ie=$i+10; $cc = sum(@cov[$i..$ie]); if($cc > $c){$c=$cc;$l=int(($i+$ie)/2);}; }; $,="\t"; $F[2]=int($l-$distant/2); $F[3]=int($l+$distant/2); $F[2] = 1 if $F[2] < 1; $F[3] = $gs if $F[3] > $gs; $F[5]=int(sum(@cov[$F[2]..$F[3]])); $F[7]=int(sum(@cov[$F[2]..$F[3]])/sum(@cov)*10000000); print @F; }'\' $PREFIX"."$GeneName"_{}.cov" $PREFIX"."$GeneName"_{}.peak.txt" ">" $PREFIX"."$GeneName"_{}.peak.modified.txt"
+
+#echo "scapture_callpeak: 4. perform normality and unimodality statistic test to evaluate whether the read singals are from true poly(A) sites."
+cat $PREFIX"."$GeneName".keepisoform" | parallel -j 1 Rscript $SCAPTUREPATH"/scripts/Normality.R" $PREFIX"."$GeneName"_{}.peak.modified.txt" $PREFIX"."$GeneName"_{}.cov" $PeakWidth
+cat $PREFIX"."$GeneName".keepisoform" | parallel -j 1 cat $PREFIX"."$GeneName"_{}.peak.modified.txt" "|" perl -alne \''$,="\t"; next if $_ =~ /^#/; $n++; print "{}",$F[2],$F[3],"{}-$n",$F[5],$F[4] if $F[4] eq "$ENV{Strand}";'\' "|" perl -alne \'' if($#ARGV==0){$pn{"$F[2]-$F[3]"}=$F[8];$ps{"$F[2]-$F[3]"}=$F[9];$pb{"$F[2]-$F[3]"}=$F[10];}else{$,="\t";print @F,$pn{"$F[1]-$F[2]"},$ps{"$F[1]-$F[2]"},$pb{"$F[1]-$F[2]"};} '\' $PREFIX"."$GeneName"_{}.peak.modified.Pvalue.txt" - > $PREFIX"."$GeneName".peak.txt"
+perl -alne '$,="\t";$F[4]=0;print @F[0..5];' $PREFIX"."$GeneName".peak.txt" > $PREFIX"."$GeneName".peak.bed"
+#echo "scapture_callpeak: Failed in normality test step! Please check R packages or output file from R script used in test!"
+PEAKNUM=$(cat $PREFIX"."$GeneName".peak.txt" | wc -l); if [ $PEAKNUM -eq 0 ]; then  clearTempFiles $PREFIX $GeneName; exit 1; fi;
+
+#echo "scapture_callpeak: 5. convert transcript coordinate to genomic coordinate for peaks in each transcript"
+#echo "scapture_callpeak: peak to corresponding transcript for exonic peaks"
+PEAKtoISO=$(perl -alne '$,="\t";if($#ARGV==0){$bed{$F[3]}=$_;}else{ next if $_ =~ /^#/; @b=split("\t",$bed{$F[0]}); @bl=split(",",$b[10]);@bs=split(",",$b[11]); $distanceS=0; $distanceE=0;$se=0;$ee=0;$start=0;$end=0;$startl=0;$endl=0; for($i=0;$i<=$#bs;$i++){ $,="\t"; $distanceS += $bl[$i-1] if $i>=1; $distanceE += $bl[$i]; if($distanceS <= $F[1] & $F[1] < $distanceE){ $se=$i; $startl=$F[1]-$distanceS; $start = $b[1]+$bs[$i]+$startl; };  if($distanceS < $F[2] & $F[2] <= $distanceE){ $ee=$i; $endl = $F[2]-$distanceS; $end = $b[1]+$bs[$i]+$endl;}; }; $,="\t"; print $b[0],$start,$end,$F[3],$F[4],$F[5];}' $PREFIX"."$GeneName".bed" $PREFIX"."$GeneName".peak.bed")
+#echo "scapture_callpeak: transcript coordinate to genomic coordinate for exonic peaks"
+ISOtoGENOME=$(echo "$PEAKtoISO" | perl -alne '$,="\t"; if($#ARGV==0){$gene{$F[0]}=$_;}else{ $F[3]=~/^(.+?)-\d+$/;@g=split("\t",$gene{$1}); @s=split(",",$g[8]);@e=split(",",$g[9]); $es=0;$ee=0; for($i=0;$i<=$g[7];$i++){ if( $s[$i] <= $F[1] && $F[1] < $e[$i]){$es=$i;}; if( $s[$i] < $F[2] && $F[2] <= $e[$i]){$ee=$i;}; }; $,="\t"; print $F[3],$F[0],$F[5],$F[1],$F[2],$F[1],$F[2],$ee-$es+1,join(",",($F[1],@s[$es+1..$ee])),join(",",(@e[$es..$ee-1],$F[2])); }' $PREFIX"."$GeneName".txt" - | genePredToBed /dev/stdin /dev/stdout)
+perl -alne 'if($#ARGV==0){$tag{$F[3]}=$F[4];}else{$F[4]=$tag{$F[3]};$,="\t";print @F}' <(echo "$PEAKtoISO") <(echo "$ISOtoGENOME") | sort -k1,1 -k2,2n > $PREFIX"."$GeneName".exonic.peak.isoform.bed"
+unset PEAKtoISO ISOtoGENOME
+
+#echo "scapture_callpeak: 6. perform normality and unimodality statistic test filtering for exonic peaks"
+perl -alne 'if($#ARGV==0){$pn{$F[3]}=$F[6];$ps{$F[3]}=$F[7];$pb{$F[3]}=$F[8];}else{ $n=$pn{$F[3]};$s=$ps{$F[3]};$b=$pb{$F[3]};  if($n <= 0.0001 | $s <= 0.0001){if($b <= 0.0001){print;};};  if($n > 0.0001 & $s > 0.0001){print;};}' $PREFIX"."$GeneName".peak.txt" $PREFIX"."$GeneName".exonic.peak.isoform.bed" > $PREFIX"."$GeneName".exonic.peak.isoform.normality.bed"
+#echo "scapture_callpeak: Skip gene without efficient exonic peaks after normality test"
+PEAKNUM=$(cat $PREFIX"."$GeneName".exonic.peak.isoform.normality.bed" | wc -l); if [ $PEAKNUM -eq 0 ]; then clearTempFiles $PREFIX $GeneName; exit 1; fi;
+
+#echo "scapture_callpeak: 7. aggregate overlap exonic peaks from different transcripts of a gene locus"
+#OverlapRatio: $OverlapRatio (default: 50%)
+OVERLAPPEAK=$(bedtools intersect -s -split -f $OverlapRatio -wao -a $PREFIX"."$GeneName".exonic.peak.isoform.normality.bed" -b $PREFIX"."$GeneName".exonic.peak.isoform.normality.bed" | sort -k4,4 -k16,16 | perl -alne 'BEGIN{$,="\t";$n=1;$m=0;}; $m++; $a=$F[3];$b=$F[15]; $g{$F[3]}=join("\t",@F[0..11]);$g{$F[15]}=join("\t",@F[12..23]); if($m==1){$c{$a}=$n;$c{$b}=$n;next;}; if( $c{$a} && $c{$b} ){ next; }; if( !$c{$a} && $c{$b} ){ $c{$a}=$c{$b};next; }; if( $c{$a} && !$c{$b} ){ $c{$b}=$c{$a};next; }; if( !$c{$a} && !$c{b} ){ $n++; $c{$a}=$n;$c{$b}=$n;next; };  END{for $k (keys %c){print $g{$k},$c{$k}};}' | sort -k13,13n -k1,1 -k2,2n)
+echo "$OVERLAPPEAK" | perl -alne 'if($#ARGV==0){$e{$F[3]}=$F[4];}else{$,="\t";print @F,$e{$F[3]} }' $PREFIX"."$GeneName".peak.txt" - | sort -k13,13n -k14,14gr | perl -alne '$,="\t";$F[4]=0;print @F[0..11] unless $g{$F[12]};$g{$F[12]}=1;' > $PREFIX"."$GeneName".exonic.peak.isoform.normality.aggregate.bed"
+unset OVERLAPPEAK
+
+#echo "scapture_callpeak: 8. estimate abundance of exonic peaks and filter lowly expressed exonic peaks."
+bedToGenePred $PREFIX"."$GeneName".exonic.peak.isoform.normality.aggregate.bed" /dev/stdout | genePredToGtf file /dev/stdin /dev/stdout | stringtie -e -G /dev/stdin $PREFIX"."$GeneName".bam" > $PREFIX"."$GeneName".exonic.peak.isoform.aggregate.express"
+PEAKNUM=$(cat $PREFIX"."$GeneName".exonic.peak.isoform.aggregate.express" | perl -alne 'BEGIN{$n=0;};next if $F[2] ne "transcript"; $_=~/gene_id "(.+)"; transcript_id.*TPM "(.+)";/; $t=$2; $n++ if $t > 0 & $t ne "-nan";END{print $n;}')
+#echo "scapture_callpeak: Skip gene without efficiently expressed exonic peaks"
+if [ $PEAKNUM -eq 0 ]; then clearTempFiles $PREFIX $GeneName; exit 1; fi;
+
+cat $PREFIX"."$GeneName".exonic.peak.isoform.aggregate.express" | perl -alne 'next if $F[2] ne "transcript"; $_=~/gene_id "(.+)"; transcript_id.*TPM "([\d\.]+)";/;print "$1\t$2";' | perl -alne '$n = $n+$F[1]*$F[1]; push @all,$F[0];push @ell,$F[1];END{$,="\t";for($i=0;$i<=$#all;$i++){print $all[$i],$ell[$i],$ell[$i]*$ell[$i]/$n if $ell[$i]*$ell[$i]/$n >= 0.01;}}' | cut -f 1 | perl -alne 'if($#ARGV==0){$g{$F[0]}=1;}else{ print if $g{$F[3]};}' - $PREFIX"."$GeneName".exonic.peak.isoform.normality.aggregate.bed" | sort -k1,1 -k2,2n | perl -alne '$n++;$F[3]="$ENV{GeneName}|$n|exon";$,="\t";print @F;' > $PREFIX"."$GeneName".exonic.peaks.bed" 
+
+#echo "scapture_callpeak: Remove temp files at the end ("$PREFIX"."$GeneName")"
+clearTempFiles(){
+	rm -f $1"."$2".txt" $1"."$2".cov"
+	rm -f $1"."$2".keepisoform" $1"."$2".peak.txt" $1"."$2".peak.bed" $1"."$2".exonic.peak.isoform.aggregate.express"
+	cut -f 4 $1"."$2".bed" | parallel -j 1 rm -f -r $1"."$2"_{}.genepred" $1"."$2"_{}.cov" $1"."$2"_{}.homer" $1"."$2"_{}.peak.txt" $1"."$2"_{}.peak.modified.txt" $1"."$2"_{}.peak.modified.Pvalue.txt"
+	rm $1"."$2".bed"
+}
+clearTempFiles $PREFIX $GeneName
+
+<<'COMMENT'
+echo "step-by-step exonic peak calling files for a gene:"
+echo "Total transcript level exonic peaks: "$PREFIX"."$GeneName".exonic.peak.isoform.bed"
+echo "After normality test filtering: "$PREFIX"."$GeneName".exonic.peak.isoform.normality.bed"
+echo "After overlapped peaks aggregating: "$PREFIX"."$GeneName".exonic.peak.isoform.normality.aggregate.bed"
+echo "After final expression filering: "$PREFIX"."$GeneName".exonic.peaks.bed" 
+COMMENT
+
+
+
+#echo "scapture_callpeak: Step3: gene level intron peak calling with HOMER ("$PREFIX"."$GeneName")"
+clearTempIntronFiles(){
+	rm -f -r $1"."$2".expressed.txt" $1"."$2".bam" $1"."$2".bam.bai" $PREFIX"."$GeneName".alliso.bed"
+	rm -f -r  $1"."$2".intron.cov" $1"."$GeneName".intron.homer" $PREFIX"."$GeneName".intronic.peak.homer.txt" $PREFIX"."$GeneName".intronic.peak.express.txt" 
+}
+
+#echo "scapture_callpeak: 1. extract read coverage on gene body"
+cut -f 2- $PREFIX"."$GeneName".expressed.txt" | genePredToBed /dev/stdin /dev/stdout | sort -k1,1 -k2,2n > $PREFIX"."$GeneName".alliso.bed"
+export Locus
+export GeneName
+export Strand
+samtools depth -d 0 $PREFIX"."$GeneName".bam" | perl -alne '$,="\t"; $c{$F[1]}=$F[2]; END{ $d="$ENV{Locus}"; $d =~ /^(.+):(\d+)-(\d+)$/; $chrom=$1;$s=$2;$e=$3; for($i=$s;$i<$e;$i++){ $r=0;$r=$c{$i} if $c{$i};print $chrom,$i,$i+1,$i,$r,$ENV{Strand}; }; }' - > $PREFIX"."$GeneName".intron.cov"
+
+#echo "scapture_callpeak: 2. peak calling for gene locus with HOMER"
+makeTagDirectory $PREFIX"."$GeneName".intron.homer" $PREFIX"."$GeneName".intron.cov" -format bed -force5th -fragLength $FragLength &> /dev/null
+tagThreshold=$( perl -alne '$n++;$m+=$F[4]; END{ print int($m/$n*200); }' $PREFIX"."$GeneName".intron.cov" )
+gSize=$( echo $Locus | perl -alne '$_=~/(.+):(\d+)-(\d+)/;$,="\t";print $3-$2;' - )
+findPeaks $PREFIX"."$GeneName".intron.homer" -size $PeakWidth -minDist 10 -gsize $gSize -strand separate -tagThreshold $tagThreshold -L 4 -C 4 -o $PREFIX"."$GeneName".intronic.peak.homer.txt" &> /dev/null
+unset tagThreshold gSize
+PEAKNUM=$(perl -alne 'next if $F[0]=~/#/;$n++;END{print $n;}' $PREFIX"."$GeneName".intronic.peak.homer.txt" )
+#echo "scapture_callpeak: Skip gene without called intronic peaks by HOMER"
+if [[ ! -f $PREFIX"."$GeneName".intronic.peak.homer.txt" || $PEAKNUM -eq 0 ]]; then clearTempIntronFiles $PREFIX $GeneName; unset PEAKNUM; exit 1; fi;
+
+#echo "scapture_callpeak: 3. adjust position of called peaks based on extreme point of read coverage"
+perl -MList::Util=sum -alne 'if($#ARGV==0){push @cov,$F[4];}else{ next if $_=~/^#/; $d="$ENV{Locus}"; $d =~ /^(.+):(\d+)-(\d+)$/; $chrom=$1;$ss=$2;$ee=$3;  $F[2] -= $ss; $F[3] -= $ss; $distant=$F[3]-$F[2];  $c=0;$cc=0;$l=$F[2]; for($i=$F[2];$i<$F[3];$i+=10){ $ie=$i+10; $cc = sum(@cov[$i..$ie]); if($cc > $c){$c=$cc;$l=int(($i+$ie)/2);}; }; $,="\t"; $F[5]=int(sum(@cov[$F[2]..$F[3]])); $F[7]=int(sum(@cov[$F[2]..$F[3]])/sum(@cov)*10000000); $F[2]=int($ss+$l-$distant/2); $F[3]=int($ss+$l+$distant/2); $F[2] = $ss if $F[2] < $ss; $F[3] = $ee if $F[3] > $ee;  print @F; }' $PREFIX"."$GeneName".intron.cov" $PREFIX"."$GeneName".intronic.peak.homer.txt" > $PREFIX"."$GeneName".intronic.peak.express.txt"  
+cat $PREFIX"."$GeneName".intronic.peak.express.txt"  | perl -alne '$,="\t";next if $_=~/^#/;print $F[1],$F[2],$F[3],"$F[1]:$F[2]:$F[3]",0,$F[4];' | bedtools intersect -a - -b $PREFIX"."$GeneName".alliso.bed" -s -split -v -wa | perl -alne 'if($#ARGV==0){$m++;$tss=$F[1] if $m==1;$tes=$F[2] if $m==1; $tss = $F[1] if $F[1] < $tss; $tes = $F[2] if $F[2] > $tes; }else{$n++; $t="intron";$t="3primeExtended" if $F[1] > $tes & $F[5] eq "+";$t="3primeExtended" if $F[2] < $tss & $F[5] eq "-";  $F[3]="$ENV{GeneName}|$n|$ENV{GeneName}|$t";$,="\t";print @F;}' $PREFIX"."$GeneName".alliso.bed" - | perl -alne '$,="\t";$d=$F[2]-$F[1];print @F,$F[2],$F[2],0,1,"$d,","0,";' > $PREFIX"."$GeneName".intronic.rawpeak.bed"
+#echo "Skip gene without intronic peaks after adjust position"
+PEAKNUM=$(cat $PREFIX"."$GeneName".intronic.rawpeak.bed" | wc -l); if [ $PEAKNUM -eq 0 ]; then clearTempIntronFiles $PREFIX $GeneName; exit 1; fi;
+
+#echo "scapture_callpeak: 4. aggregate overlap intronic peaks from a gene locus"
+OverlapPeakIntron=$(bedtools intersect -s -split -wao -a $PREFIX"."$GeneName".intronic.rawpeak.bed" -b $PREFIX"."$GeneName".intronic.rawpeak.bed" | sort -k4,4 -k16,16 | perl -alne 'BEGIN{$,="\t";$n=1;$m=0;}; $m++; $a=$F[3];$b=$F[15]; $g{$F[3]}=join("\t",@F[0..11]);$g{$F[15]}=join("\t",@F[12..23]); if($m==1){$c{$a}=$n;$c{$b}=$n;next;}; if( $c{$a} && $c{$b} ){ next; }; if( !$c{$a} && $c{$b} ){ $c{$a}=$c{$b};next; }; if( $c{$a} && !$c{$b} ){ $c{$b}=$c{$a};next; }; if( !$c{$a} && !$c{b} ){ $n++; $c{$a}=$n;$c{$b}=$n;next; };  END{for $k (keys %c){print $g{$k},$c{$k}};}' | sort -k13,13n -k1,1 -k2,2n)
+echo "$OverlapPeakIntron" | perl -alne 'if($#ARGV==0){$e{"$F[1]:$F[2]-$F[3]"}=$F[5];}else{$,="\t";print @F,$e{"$F[0]:$F[1]-$F[2]"} }' $PREFIX"."$GeneName".intronic.peak.express.txt"  - | sort -k13,13n -k14,14gr | perl -alne '$,="\t";print @F[0..11] unless $g{$F[12]};$g{$F[12]}=1;' > $PREFIX"."$GeneName".intronic.peak.aggregate.bed"
+unset OVERLAPPEAK
+
+#echo "scapture_callpeak: 5. estimate abundance of intronic peaks and filter lowly expressed intronic peaks."
+ExpressPeakIntron=$(bedToGenePred $PREFIX"."$GeneName".intronic.peak.aggregate.bed" /dev/stdout | genePredToGtf file /dev/stdin /dev/stdout | stringtie -e -G /dev/stdin $PREFIX"."$GeneName".bam" | perl -alne 'next if $F[2] ne "transcript"; $_=~/gene_id "(.+)"; transcript_id.*TPM "([\d\.]+)";/;print "$1\t$2";')
+PEAKNUM=$(echo "$ExpressPeakIntron" | perl -alne 'BEGIN{$n=0;}; $n++ if $F[1] > 0 & $F[1] ne "-nan";END{print $n;}')
+#echo "scapture_callpeak: Skip gene without efficiently expressed intronic peaks"
+if [ $PEAKNUM -eq 0 ]; then clearTempIntronFiles $PREFIX $GeneName; exit 1; fi;
+echo "$ExpressPeakIntron" | perl -alne '$n = $n+$F[1]*$F[1]; push @all,$F[0];push @ell,$F[1];END{$,="\t";for($i=0;$i<=$#all;$i++){print $all[$i],$ell[$i],$ell[$i]*$ell[$i]/$n if $ell[$i]*$ell[$i]/$n >= 0.01;}}' | cut -f 1 | perl -alne 'if($#ARGV==0){$g{$F[0]}=1;}else{print if $g{$F[3]};}' - $PREFIX"."$GeneName".intronic.peak.aggregate.bed" | sort -k1,1 -k2,2n | perl -alne '$n++;$F[3]=~/^(.+)\|(\d+)\|(.+)\|(.+)$/;$F[3]="$1|$n|$4";$,="\t";print @F;' > $PREFIX"."$GeneName".intronic.peaks.bed" 
+unset ExpressPeakIntron
+
+<<'COMMENT'
+echo "step-by-step intronic peak calling files for a gene:"
+echo "Total intronic peaks: "$PREFIX"."$GeneName".intronic.rawpeak.bed"
+echo "After aggregating: "$PREFIX"."$GeneName".intronic.peak.aggregate.bed"
+echo "After expression filering: "$PREFIX"."$GeneName".intronic.peaks.bed" 
+COMMENT
+
+#echo "scapture_callpeak: Remove temp files at the end ("$PREFIX"."$GeneName")"
+clearTempIntronFiles $PREFIX $GeneName
