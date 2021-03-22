@@ -85,9 +85,11 @@ if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
 	if [ ! -e "$CellType" ]; then echo $CellType" dosn't exisits! exit !"; exit 1; fi;
 	CellInfor=$(cat $CellType)
 	CellIdentity=$(echo "$CellInfor" | cut -f 2 | sort -u )
-elif [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
+elif [[ "$CellList" != "NULL" && "$CellList" != "FromBAM" && "$CellType" == "NULL" ]]; then
 	if [ ! -e "$CellList" ]; then echo $CellList" dosn't exisits! exit !"; exit 1; fi;
 	CellInfor=$(cat $CellList)
+elif [[ "$CellList" != "NULL" && "$CellList" == "FromBAM" && "$CellType" == "NULL" ]]; then
+	echo "Use all cell barcode in BAM file as cell list!"
 else
 	echo "error in input cell file parameter!"
 	exit 1
@@ -107,14 +109,21 @@ if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
 
 	#echo -n "PASquant Step2: filter BAM by given cells. "; date
 	echo "$CellInfor" > $PREFIX".KeepCell.txt"
-	FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.bam" SUMMARY=$PREFIX".KeepCell.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.txt" &> $PREFIX".KeepCell.FilterBam.log"
-	samtools view -bh $PREFIX".KeepCell.bam" | samtools sort -@ 4 - -o $PREFIX".KeepCell.srt.bam" &> /dev/null
-	samtools index $PREFIX".KeepCell.srt.bam"
-	rm $PREFIX".KeepCell.bam"
+	#FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.bam" SUMMARY=$PREFIX".KeepCell.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.txt" &> $PREFIX".KeepCell.FilterBam.log"
+	#samtools view -bh $PREFIX".KeepCell.bam" | samtools sort -@ 4 - -o $PREFIX".KeepCell.srt.bam" &> /dev/null
+	#samtools index $PREFIX".KeepCell.srt.bam"
+	#rm $PREFIX".KeepCell.bam"
 	#echo -n "PASquant Step2: done. "; date
 	
+	if [[ "$CellList" != "NULL" && "$CellList" != "FromBAM" ]]; then
+		FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.srt.bam" SUMMARY=$PREFIX".KeepCell.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.txt" &> $PREFIX".KeepCell.FilterBam.log"
+		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
+	fi
+	if [[ "$CellList" != "NULL" && "$CellList" == "FromBAM" ]]; then
+		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $BAMFile &> /dev/null
+	fi
 	#echo -n "PASquant Step3: re-assign reads to PASs. "; date
-	featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
+	#featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
 	samtools sort -@ 4 $PREFIX".KeepCell.srt.bam.featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
 	samtools index $PREFIX".KeepCell.reassigned.bam"
 	rm $PREFIX".KeepCell.srt.bam.featureCounts.bam" $PREFIX".KeepCell.srt.bam" $PREFIX".KeepCell.srt.bam.bai"
