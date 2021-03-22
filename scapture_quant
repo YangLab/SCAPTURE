@@ -119,14 +119,16 @@ if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
 		FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.srt.bam" SUMMARY=$PREFIX".KeepCell.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.txt" &> $PREFIX".KeepCell.FilterBam.log"
 		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
 		samtools sort -@ 4 $PREFIX".KeepCell.srt.bam.featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
+		rm $PREFIX".KeepCell.srt.bam.featureCounts.bam"
 	fi
 	if [[ "$CellList" != "NULL" && "$CellList" == "FromBAM" ]]; then
 		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $BAMFile &> /dev/null
 		samtools sort -@ 4 $BAMFile".featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
+		rm $BAMFile".featureCounts.bam"
 	fi
 	#echo -n "PASquant Step3: re-assign reads to PASs. "; date	
 	samtools index $PREFIX".KeepCell.reassigned.bam"
-	rm $PREFIX".KeepCell.srt.bam.featureCounts.bam" $PREFIX".KeepCell.srt.bam" $PREFIX".KeepCell.srt.bam.bai"
+	rm $PREFIX".KeepCell.srt.bam" $PREFIX".KeepCell.srt.bam.bai"
 	#echo -n "PASquant Step3: done. "; date
 	
 	#echo -n "PASquant Step4: count UMIs for PASs. "; date
