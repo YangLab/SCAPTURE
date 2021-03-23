@@ -128,7 +128,7 @@ if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
 	fi
 	#echo -n "PASquant Step3: re-assign reads to PASs. "; date	
 	samtools index $PREFIX".KeepCell.reassigned.bam"
-	rm $PREFIX".KeepCell.srt.bam" $PREFIX".KeepCell.srt.bam.bai"
+	#rm $PREFIX".KeepCell.srt.bam" $PREFIX".KeepCell.srt.bam.bai"
 	#echo -n "PASquant Step3: done. "; date
 	
 	#echo -n "PASquant Step4: count UMIs for PASs. "; date
