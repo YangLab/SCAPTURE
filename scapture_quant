@@ -12,7 +12,9 @@ Options:
  -o          -- output prefix
  -b          -- Cell Ranger aligned BAM file.
  --pas       -- PASs peaks file to quantify.
- --celllist  -- Cell barcode as white list to count UMIs.
+ --celllist  -- cell barcode file as white list(one barcode per line),
+                or use "--celllist FromBAM" to extract all cell barcode
+                from input BAM (for unfiltered BAM, it might spend a lot of time).
  --celltype  -- Cell type annotation file
                 (tab split, 
                 1st col: "cell_barcode",
