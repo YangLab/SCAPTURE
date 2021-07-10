@@ -225,13 +225,21 @@ if [ "$MODULE" == "PAScall2" ]; then
 	wait
 	GeneList=$(perl -alne '@s=split(/\|/,$F[1]);$gene{"$s[0]"}+=$F[0]; END{for $g (keys %gene){print $g if $gene{$g} > 0;}}' $PREFIX".genetype.count.txt" )
 	wait
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peak.isoform.bed" &
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peak.isoform.normality.bed" &
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.aggregate.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peak.isoform.normality.aggregate.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peak.isoform.normality.aggregate.bed" &
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.exonic.peaks.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.exonic.peaks.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".exonic.peaks.bed" &
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.intronic.rawpeak.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.intronic.rawpeak.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".intronic.rawpeak.bed" &
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.intronic.peak.aggregate.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.intronic.peak.aggregate.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".intronic.peak.aggregate.bed" &
-	echo "$GeneList" | parallel -j 1 if "[" -f "$OUTDIR/Per_Gene/scapture.{}.intronic.peaks.bed" "];" then cat "$OUTDIR/Per_Gene/scapture.{}.intronic.peaks.bed" ";" fi | sort -k1,1 -k2,2n > $OUTDIR/$PREFIX".intronic.peaks.bed" &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peak.isoform.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peak.isoform.bed" >> "${OUTDIR}/${PREFIX}.exonic.peak.isoform.tmp"; fi; done &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peak.isoform.normality.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peak.isoform.normality.bed" >> "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.tmp"; fi; done &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peak.isoform.normality.aggregate.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peak.isoform.normality.aggregate.bed" >> "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.aggregate.tmp"; fi; done &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peaks.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.exonic.peaks.bed" >> "${OUTDIR}/${PREFIX}.exonic.peaks.tmp"; fi; done &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.intronic.rawpeak.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.intronic.rawpeak.bed" >> "${OUTDIR}/${PREFIX}.intronic.rawpeak.tmp"; fi; done &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.intronic.peak.aggregate.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.intronic.peak.aggregate.bed" >> "${OUTDIR}/${PREFIX}.intronic.peak.aggregate.tmp"; fi; done &
+	for i in $(echo $GeneList); do if [ -f "${OUTDIR}/Per_Gene/scapture.${i}.intronic.peaks.bed" ]; then cat "${OUTDIR}/Per_Gene/scapture.${i}.intronic.peaks.bed" >> "${OUTDIR}/${PREFIX}.intronic.peaks.tmp"; fi; done &
+	wait
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.exonic.peak.isoform.tmp" > "${OUTDIR}/${PREFIX}.exonic.peak.isoform.bed"; rm "${OUTDIR}/${PREFIX}.exonic.peak.isoform.tmp"
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.tmp" > "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.bed";rm "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.tmp"
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.aggregate.tmp" > "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.aggregate.bed";rm "${OUTDIR}/${PREFIX}.exonic.peak.isoform.normality.aggregate.tmp"
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.exonic.peaks.tmp" > "${OUTDIR}/${PREFIX}.exonic.peaks.bed";rm "${OUTDIR}/${PREFIX}.exonic.peaks.tmp"
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.intronic.rawpeak.tmp" > "${OUTDIR}/${PREFIX}.intronic.rawpeak.bed";rm "${OUTDIR}/${PREFIX}.intronic.rawpeak.tmp"
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.intronic.peak.aggregate.tmp" > "${OUTDIR}/${PREFIX}.intronic.peak.aggregate.bed";rm "${OUTDIR}/${PREFIX}.intronic.peak.aggregate.tmp"
+	sort -k1,1 -k2,2n "${OUTDIR}/${PREFIX}.intronic.peaks.tmp" > "${OUTDIR}/${PREFIX}.intronic.peaks.bed";rm "${OUTDIR}/${PREFIX}.intronic.peaks.tmp"
 	wait
 	cp $OUTDIR/$PREFIX".exonic.peaks.bed" $PREFIX".exonic.peaks.bed"
 	cp $OUTDIR/$PREFIX".intronic.peaks.bed" $PREFIX".intronic.peaks.bed"
