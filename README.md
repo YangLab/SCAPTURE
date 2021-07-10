@@ -5,7 +5,6 @@ Description:
 
 ## Installation:
 * Require [featureCounts ≥ v1.6.2](http://bioinf.wehi.edu.au/featureCounts/)
-* Require bedtools == v2.26.0 (conda install -c biobuilds bedtools=2.26.0)
 
 * Create conda env from [SCAPTURE yaml file](https://github.com/YangLabPublic/SCAPTURE/blob/main/SCAPTURE_env.yaml):
 
