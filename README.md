@@ -9,7 +9,6 @@ Description:
 * Create conda env from [SCAPTURE yaml file](https://github.com/YangLabPublic/SCAPTURE/blob/main/SCAPTURE_env.yaml):
 
 		conda env create -f SCAPTURE_env.yaml
-		conda activate SCAPTURE_env
 	
 * Download and unzip package from Github, then add "+x" to scripts to make it executable.
 	
@@ -30,7 +29,10 @@ Description:
 		which scapture
 		"/YOUR_PATH_TO_SCAPTURE/SCAPTURE-main/scapture"
 		
+* Activate SCAPTURE_env environment before running SCAPTURE
 
+		conda activate SCAPTURE_env
+		
 ## Usage:
 
     scapture -m <annotation|PAScall|PASmerge|PASquant> [options]
