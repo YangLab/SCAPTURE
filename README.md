@@ -1,5 +1,5 @@
 # SCAPTURE
-![image](https://github.com/lexsaints/powershell/blob/master/IMG/ps2.png)
+![image](https://github.com/YangLab/SCAPTURE/blob/main/scripts/Schematic%20diagram.jpg)
 
 
 Description:
