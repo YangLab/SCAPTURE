@@ -1,4 +1,6 @@
 # SCAPTURE
+![image](https://github.com/lexsaints/powershell/blob/master/IMG/ps2.png)
+
 
 Description:
 	SCAPRUTE pipeline. A deep learning-embedded pipeline that captures polyadenylation information from 3 prime tag-based RNA-seq of single cells
