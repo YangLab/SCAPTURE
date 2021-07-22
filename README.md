@@ -229,7 +229,7 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 
 # Single-cell APA analysis vignettes:
 	
-* A vignettes of single-cell APA analysis about COVID-19 study could be found at https://github.com/YangLabPublic/SCAPTURE/blob/main/Vignettes.html.zip.
+* A vignettes of single-cell APA analysis about COVID-19 study could be found at https://github.com/YangLab/SCAPTURE/blob/main/Vignettes.html.zip.
 
 
 ## License
