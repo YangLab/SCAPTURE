@@ -227,6 +227,10 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 	PBMC8k.PASquant.KeepCell.UMIs.tsv.gz
 	PBMC10k.PASquant.KeepCell.UMIs.tsv.gz
 
+# Single-cell APA analysis vignettes:
+	
+* A vignettes of single-cell APA analysis about COVID-19 study could be found at https://github.com/YangLabPublic/SCAPTURE/blob/main/Vignettes.html.zip.
+
 
 ## License
 
