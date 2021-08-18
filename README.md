@@ -88,7 +88,7 @@ Options:
 	-b          -- Cell Ranger aligned BAM file
 	--pas       -- PASs peaks file to quantify
 	--celllist  -- cell barcode file as white list(one barcode per line),
-	               or use "--celllist FromBAM" to extract all cell barcode
+	               or use "--celllist FromBAM" to used all cell barcode in BAM file.
 	               from input BAM (for unfiltered BAM, it might spend a lot of time).
 	--celltype  -- cell type annotation file
 	               (tab split, 
