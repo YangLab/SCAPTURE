@@ -119,7 +119,7 @@ fi
 #echo "scapture_callpeak: 1. extract read coverage on transcript body"
 bedtools intersect -a $PREFIX"."$GeneName".bam" -b $PREFIX"."$GeneName".bed" -split -f 0.95 -u -bed | bedtools bedtobam -i - -bed12 -g $Chromsize | samtools depth -d 0 - >  $PREFIX"."$GeneName".cov"
 perl -alne 'print "$F[0]\t\t\t$_";' $PREFIX"."$GeneName".txt" | parallel -j 1 --colsep="\t\t\t" echo {2} ">" $PREFIX"."$GeneName"_{1}.genepred"
-cut -f 4 $PREFIX"."$GeneName".bed" | parallel perl -alne \''$,="\t";if($#ARGV==0){$p=$F[1]-1;$d{$p}=$F[2];}else{@s=split(",",$F[8]);@e=split(",",$F[9]); $l=0; for($i=0;$i<=$#s;$i++){for($j=$s[$i];$j<$e[$i];$j++){print $F[1],$l,$l+1,"$j",$d{$j},$F[2] if $d{$j};print $F[1],$l,$l+1,"$j",0,$F[2] unless $d{$j};$l++;}} };'\' $PREFIX"."$GeneName".cov" $PREFIX"."$GeneName"_{}.genepred" ">" $PREFIX"."$GeneName"_{}.cov"
+cut -f 4 $PREFIX"."$GeneName".bed" | parallel -j 1 perl -alne \''$,="\t";if($#ARGV==0){$p=$F[1]-1;$d{$p}=$F[2];}else{@s=split(",",$F[8]);@e=split(",",$F[9]); $l=0; for($i=0;$i<=$#s;$i++){for($j=$s[$i];$j<$e[$i];$j++){print $F[1],$l,$l+1,"$j",$d{$j},$F[2] if $d{$j};print $F[1],$l,$l+1,"$j",0,$F[2] unless $d{$j};$l++;}} };'\' $PREFIX"."$GeneName".cov" $PREFIX"."$GeneName"_{}.genepred" ">" $PREFIX"."$GeneName"_{}.cov"
 
 #echo "scapture_callpeak: 2. peak calling for each transcript with HOMER"
 cut -f 4 $PREFIX"."$GeneName".bed" | parallel -j 1 makeTagDirectory $PREFIX"."$GeneName"_{}.homer" $PREFIX"."$GeneName"_{}.cov" -format bed -force5th -fragLength $FragLength &> /dev/null
