@@ -173,7 +173,9 @@ SCAPTURE supports references given by users for specific study. Currently, we ta
 	PBMC3k.intronic.peaks.evaluated.bed # evaluated intronic peak
 	PBMC3k.3primeExtended.peaks.evaluated.bed # assigned peaks in dowstream region out of gene 3UTR locus
 	PBMC3k.3primeExtended.peaks.annotated.bed # evaluated intronic peak in dowstream region out of gene 3UTR locus
-	
+
+  The output poly(A) site file was in widely used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7). Briefly, the colum 1-6 represent the peak region of poly(A) sites, the colum 7-12 represent detail blocks information of the peak region.
+
 ### Run scapture PASmerge module
 
 If your study includes multiple samples, SCAPTURE can merge the peak result from all samples, and create a combined peak reference file for downstream analysis.
