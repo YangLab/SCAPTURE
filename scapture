@@ -80,7 +80,7 @@ CellType="NULL"
 ConvertBW="false"
 MEGAthread=4
 #get command line parameters
-ARGS=`getopt -o m:a:o:b:g:l:w:p:h --long gtf:,cs:,extend:,overlap:,polyaDB:,peak:,rawpeak:,pas:,celllist:,celltype:,bw:,help  -- "$@"`
+ARGS=`getopt -o m:a:o:b:g:l:w:p:h --long gtf:,cs:,extend:,species:,overlap:,polyaDB:,peak:,rawpeak:,pas:,celllist:,celltype:,bw:,help  -- "$@"`
 eval set -- "$ARGS"
 while true ; do
 	case "$1" in
@@ -189,7 +189,7 @@ fi
 
 if [ "$MODULE" == "PAScall" ]; then
 	echo "scapture path: "$SCAPTUREPATH
-	echo "DeepPASS model file: "$SCAPTUREPATH"/DeepPASS/best_model.h5"
+	echo "DeepPASS model file dir: "$SCAPTUREPATH"/DeepPASS/"
 	echo "scapture module: "$MODULE
 	echo "Output prefix: "$PREFIX
 	echo "prefix of annotation files from annotation module: "$ANNO
