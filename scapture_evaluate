@@ -13,6 +13,7 @@ Parameters passed from SCAPRUTE:
  -g          -- genome fa file
  --peak      -- peak file to evaluate
  --path      -- path of scapture suite (ignore if scapture in PATH)
+ --species   -- species for DeepPASS model ('human', 'mouse')
  --model     -- DeepPASS model h5 file (ignore if scapture in PATH)
  --polyaDB   -- poly(A) site database bed6 file (optional)
  -h/---help  -- help information
@@ -32,14 +33,15 @@ fi
 #default parameters:
 
 #get command line parameters
-ARGS=`getopt -o o:g:h --long peak:,path:,model:,polyaDB:,help  -- "$@"`
+ARGS=`getopt -o o:g:h --long peak:,path:,species:,model:,polyaDB:,help  -- "$@"`
 eval set -- "$ARGS"
 while true ; do
 	case "$1" in
 		-o) PREFIX=$2 ; shift 2;;
 		-g) GENOME=$2 ; shift 2;;
 		--peak) PEAK=$2 ; shift 2;;
-		--path) SCAPTUREPATH=$2 ; DeepPASSmodel=$SCAPTUREPATH"DeepPASS/best_model.h5" ; DeepPASSpredict=$SCAPTUREPATH"DeepPASS/Predict.py"; shift 2;;
+		--path) SCAPTUREPATH=$2 ; DeepPASSmodel=$SCAPTUREPATH"DeepPASS/" ; DeepPASSpredict=$SCAPTUREPATH"DeepPASS/Predict.py"; shift 2;;
+		--species) SPECIES=$2 ; shift 2;;
 		--model) DeepPASSmodel=$2 ; shift 2;;
 		--polyaDB) POLYADB=$2 ; shift 2;;
 		-h) helpdoc ; exit 1;;
@@ -52,6 +54,33 @@ while true ; do
 	esac
 done
 
+#check parameters:
+if [ -z "$SCAPTUREPATH" ]; then
+#	echo "scapture path is not set. Try to find scapture in current ENV"
+	SCAPTUREPATH=$(which scapture)
+	if [[ "$SCAPTUREPATH" == *scapture ]]; then
+#		echo "scapture is found in: "$SCAPTUREPATH
+		SCAPTUREPATH=${SCAPTUREPATH%scapture}
+		DeepPASSpredict=$SCAPTUREPATH"DeepPASS/Predict.py"
+	else
+		echo "scapture is not found!"
+		exit 1
+	fi
+fi
+
+if [[ "$SPECIES" == "human" ]]; then
+	DeepPASSmodel=$SCAPTUREPATH"DeepPASS/best_model.h5"
+elif [[ "$SPECIES" == "mouse" ]]; then
+	DeepPASSmodel=$SCAPTUREPATH"DeepPASS/mm10_best_model.h5"
+else
+	DeepPASSmodel=$SCAPTUREPATH"DeepPASS/best_model.h5"
+	echo "Species is not currently supported in DeepPASS, use human model instead !"
+fi
+
+if [ ! -e "$GENOME" ]; then echo "GENOME dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$PEAK" ]; then echo "PEAK dosn't exisits! exit !"; exit 1; fi;
+if [ ! -e "$DeepPASSmodel" ]; then echo "DeepPASS model dosn't exisits! exit !"; exit 1; fi;
+
 <<'COMMENT'
 echo "Output prefix: "$PREFIX
 echo "Genome file: "$GENOME
@@ -60,25 +89,6 @@ echo "scapture path: "$SCAPTUREPATH
 echo "DeepPASS model file: "$DeepPASSmodel
 echo "poly(A) databases file: "$POLYADB
 COMMENT
-
-#check parameters:
-if [ -z "$SCAPTUREPATH" ]; then
-#	echo "scapture path is not set. Try to find scapture in current ENV"
-	SCAPTUREPATH=$(which scapture)
-	if [[ "$SCAPTUREPATH" == *scapture ]]; then
-#		echo "scapture is found in: "$SCAPTUREPATH
-		SCAPTUREPATH=${SCAPTUREPATH%scapture}
-		DeepPASSmodel=$SCAPTUREPATH"DeepPASS/best_model.h5"
-		DeepPASSpredict=$SCAPTUREPATH"DeepPASS/Predict.py"
-	else
-		echo "scapture is not found!"
-		exit 1
-	fi
-fi
-
-if [ ! -e "$GENOME" ]; then echo "GENOME dosn't exisits! exit !"; exit 1; fi;
-if [ ! -e "$PEAK" ]; then echo "PEAK dosn't exisits! exit !"; exit 1; fi;
-if [ ! -e "$DeepPASSmodel" ]; then echo "DeepPASS model dosn't exisits! exit !"; exit 1; fi;
 
 #echo "scapture_evaluate: predicting by DeepPASS"
 IntputBED=$(cat $PEAK)
