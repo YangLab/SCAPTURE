@@ -25,6 +25,7 @@ Options:
  -p          -- number of cores
  -l          -- Read length of sequenceing cDNA in scRNA-seq
  -w          -- width of poly(A) peaks (default: 400)
+ --species   -- species for DeepPASS model ('human', 'mouse')
  --overlap   -- overlapped ratio of exonic peaks to merge (default: 0.5)
  --polyaDB   -- poly(A) site database bed6 file (optional)
  
@@ -68,6 +69,7 @@ fi
 
 #default parameters:
 POLYADB="NULL"
+SPECIES="NULL"
 GENEextend=2000
 PeakList="NULL"
 RawPeakList="NULL"
@@ -93,6 +95,7 @@ while true ; do
 		--gtf) GENEGTF=$2 ; shift 2;;
 		--cs) ChromSize=$2 ; shift 2;;
 		--extend) GENEextend=$2 ; shift 2;;
+		--species) SPECIES=$2 ; shift 2;;
 		--overlap) OverlapRatio=$2 ; shift 2;;
 		--polyaDB) POLYADB=$2 ; shift 2;;
 		--peak) PeakList=$2 ; shift 2;;
@@ -282,13 +285,13 @@ if [ "$MODULE" == "PAScall4" ]; then
 	echo -n "scapture PAScall: PAS evaluating. "; date
 #	echo "exon DeepPASS"
 #	echo "scapture_evaluate --peak $PREFIX".exonic.peaks.annotated.bed" -o $PREFIX".exonic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH "
-	scapture_evaluate --peak $PREFIX".exonic.peaks.annotated.bed" -o $PREFIX".exonic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
+	scapture_evaluate --peak $PREFIX".exonic.peaks.annotated.bed" -o $PREFIX".exonic.peaks" --species $SPECIES -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
 #	echo "intron DeepPASS"
 #	echo "scapture_evaluate --peak $PREFIX".intronic.peaks.annotated.bed" -o $PREFIX".intronic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH "
-	scapture_evaluate --peak $PREFIX".intronic.peaks.annotated.bed" -o $PREFIX".intronic.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
+	scapture_evaluate --peak $PREFIX".intronic.peaks.annotated.bed" -o $PREFIX".intronic.peaks" --species $SPECIES -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
 #	echo "3primeExtended DeepPASS"
 #	echo "scapture_evaluate --peak $PREFIX".3primeExtended.peaks.annotated.bed" -o $PREFIX".3primeExtended.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH"
-	scapture_evaluate --peak $PREFIX".3primeExtended.peaks.annotated.bed" -o $PREFIX".3primeExtended.peaks" -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
+	scapture_evaluate --peak $PREFIX".3primeExtended.peaks.annotated.bed" -o $PREFIX".3primeExtended.peaks" --species $SPECIES -g $GENOME --polyaDB $POLYADB --path $SCAPTUREPATH 
 	echo "scapture PAScall: output files -- " $PREFIX".exonic.peaks.evaluated.bed" $PREFIX".intronic.peaks.evaluated.bed" $PREFIX".3primeExtended.peaks.evaluated.bed"
 	echo -n "scapture PAScall: PAS evaluating done. "; date
 	wait
