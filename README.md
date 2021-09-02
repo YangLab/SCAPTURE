@@ -153,12 +153,12 @@ Author: Guo-Wei Li Email: liguowei@picb.ac.cn
 	
   (3) evaluate peak with DeepPASS prediction (automatically run) and poly(A) database annotation (optional)
 	
-	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC3k.test.bam  -l 98 -o PBMC3k -p 16 --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC3k.PAScall.log
-	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC4k.test.bam  -l 98 -o PBMC4k -p 16 --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC4k.PAScall.log
-	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC5k.test.bam  -l 91 -o PBMC5k -p 16 --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC5k.PAScall.log
-	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC6k.test.bam  -l 98 -o PBMC6k -p 16 --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC6k.PAScall.log
-	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC8k.test.bam  -l 98 -o PBMC8k -p 16 --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC8k.PAScall.log
-	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC10k.test.bam -l 91 -o PBMC10k -p 16 --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC10k.PAScall.log
+	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC3k.test.bam  -l 98 -o PBMC3k -p 16 --species human --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC3k.PAScall.log
+	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC4k.test.bam  -l 98 -o PBMC4k -p 16 --species human --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC4k.PAScall.log
+	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC5k.test.bam  -l 91 -o PBMC5k -p 16 --species human --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC5k.PAScall.log
+	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC6k.test.bam  -l 98 -o PBMC6k -p 16 --species human --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC6k.PAScall.log
+	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC8k.test.bam  -l 98 -o PBMC8k -p 16 --species human --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC8k.PAScall.log
+	scapture -m PAScall -a SCAPTURE_annotation -g genome.fa -b PBMC10k.test.bam -l 91 -o PBMC10k -p 16 --species human --polyaDB SupTab_KnownPASs_fourDBs.txt &> PBMC10k.PAScall.log
 	
   Output files in this step:
   
