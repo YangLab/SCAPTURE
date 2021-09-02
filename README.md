@@ -117,7 +117,7 @@ SCAPTURE supports references given by users for specific study. Currently, we ta
 		export PATH=/home/software/subread-1.6.2-Linux-x86_64/bin:$PATH
 
 * Prepare gene annotation and genome file. In this example, we use annotation from [GENCODE hg38](https://www.gencodegenes.org/human/). Besides, if poly(A) databases file (optional) is given, SCAPTURE will annotate PAS with database information and select relatively high confident PAS during merging different samples (in SCAPTURE PASmerge step). 
-* Combined PolyADB3, PolyA-Seq, PolyASite and GENCODE poly(A) databases file: [human hg38](https://drive.google.com/file/d/14ZQo9FWmMDRvIcR6mqXVMfIdQRKsaEL3/view?usp=sharing), [mouse mm10](https://drive.google.com/file/d/1aiMV7RnNbmegAR--loJrl3IOWDZ9_bRt/view?usp=sharing) (optional).
+* Combined PolyADB3, PolyA-Seq, PolyASite and GENCODE poly(A) databases file: 'SupTab_KnownPASs_fourDBs.txt' could be found at [human hg38](https://drive.google.com/file/d/14ZQo9FWmMDRvIcR6mqXVMfIdQRKsaEL3/view?usp=sharing), and [mouse mm10](https://drive.google.com/file/d/1aiMV7RnNbmegAR--loJrl3IOWDZ9_bRt/view?usp=sharing) (optional).
 	
 		ls ./
 		gencode.v34.annotation.gtf
