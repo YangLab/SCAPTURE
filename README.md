@@ -62,6 +62,7 @@ Options:
 	-p          -- number of cores
 	-l          -- read length of sequenceing cDNA in scRNA-seq
 	-w          -- width of poly(A) peaks (default: 400)
+ 	--species   -- species for DeepPASS model ('human', 'mouse')
 	--overlap   -- overlapped ratio of exonic peaks to merge (default: 0.5)
 	--polyaDB   -- poly(A) site database bed6 file (optional)
 	-h/---help  -- help information
