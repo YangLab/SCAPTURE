@@ -20,16 +20,15 @@ Description:
 
 * Export path of SCAPTURE suite to environment
 
-		#get directory of SCAPTURE scripts
-		SCAPTUREpath=$(pwd)
-		#add SCAPTURE to ./bashrc file of your environment.
-		echo "export ${SCAPTUREpath}:\$PATH" >> ~/.bashrc
-		#or manually export to environment variable before running SCAPTURE
-		export PATH=${SCAPTUREpath}:$PATH
+		SCAPTURE="/Your_Path/SCAPTURE-main"
+	Add SCAPTURE to ./bashrc file of your environment.
+		echo "export ${SCAPTURE}:\$PATH" >> ~/.bashrc
+	Or manually export to environment variable before running SCAPTURE
+		export PATH=${SCAPTURE}:$PATH
 		
-		#test whether SCAPTURE could be found
+	Test whether SCAPTURE could be found
 		which scapture
-		"/YOUR_PATH_TO_SCAPTURE/SCAPTURE-main/scapture"
+		"/Your_Path/SCAPTURE-main/scapture"
 		
 * Activate SCAPTURE_env environment before running SCAPTURE
 
