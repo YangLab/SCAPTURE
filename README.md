@@ -22,11 +22,14 @@ Description:
 
 		SCAPTURE="/Your_Path/SCAPTURE-main"
 	Add SCAPTURE to ./bashrc file of your environment.
+	
 		echo "export ${SCAPTURE}:\$PATH" >> ~/.bashrc
 	Or manually export to environment variable before running SCAPTURE
+	
 		export PATH=${SCAPTURE}:$PATH
 		
 	Test whether SCAPTURE could be found
+	
 		which scapture
 		"/Your_Path/SCAPTURE-main/scapture"
 		
