@@ -10,7 +10,7 @@ dependencies:
   - _openmp_mutex=4.5=1_gnu
   - _r-mutex=1.0.1=anacondar_1
   - alsa-lib=1.2.3=h516909a_0
-  - bedtools=2.26.0=hc088bd4_0
+  - bedtools=2.26.0=0
   - binutils_impl_linux-64=2.35=h18a2f87_9
   - binutils_linux-64=2.35=hc3fd857_29
   - bioconductor-biocgenerics=0.32.0=r36_0
@@ -257,7 +257,7 @@ dependencies:
   - ucsc-genepredtobed=357=1
   - ucsc-genepredtogtf=357=1
   - ucsc-gtftogenepred=357=1
-  - umi_tools=1.1.1=py37hf01694f_0
+  - umi_tools=1.1.2=py38h68004ad_0
   - unzip=6.0=h7f98852_2
   - wget=1.20.1=h22169c7_0
   - wheel=0.35.1=pyh9f0ad1d_0
