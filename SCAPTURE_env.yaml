@@ -3,6 +3,7 @@ channels:
   - anaconda
   - bioconda
   - conda-forge
+  - biobuilds
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=conda_forge
