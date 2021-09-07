@@ -8,7 +8,7 @@ Description:
 ## Installation:
 * Require [featureCounts ≥ v1.6.2](http://bioinf.wehi.edu.au/featureCounts/)
 
-* Create conda env from [SCAPTURE yaml file](https://github.com/YangLab/SCAPTURE/blob/main/SCAPTURE_env.yaml):
+* Create conda env from [SCAPTURE yaml file](https://github.com/YangLab/SCAPTURE/blob/main/SCAPTURE_env.yml):
 
 		conda env create -f SCAPTURE_env.yaml
 	
