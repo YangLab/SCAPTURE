@@ -213,7 +213,11 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
   For PAS quantifying at single-cell level expression, we only keep the high-confidence PASs, that is, PASs with a positive prediction by DeepPASS
   
 	#Select PASs with positive prediction
+	#With input polyaDB
+	perl -alne '$,="\t";print @F[0..11] if $F[12] > 0 | $F[13] eq "positive";' PBMC_ALL.exonic.Integrated.bed PBMC_ALL.intronic.Integrated.bed > PBMC_ALL.PASquant.bed
+	#Or, without input polyaDB
 	perl -alne '$,="\t";print @F[0..11] if $F[13] eq "positive";' PBMC_ALL.exonic.Integrated.bed PBMC_ALL.intronic.Integrated.bed > PBMC_ALL.PASquant.bed
+	
 	
 	#Quantify high-confidence PASs in six PBMC samples:
 	scapture -m PASquant -b PBMC3k.test.bam --celllist PBMC3k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC3k.PASquant &> PBMC3k.PASquant.log
