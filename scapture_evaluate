@@ -94,7 +94,7 @@ COMMENT
 IntputBED=$(cat $PEAK)
 IntputSeq=$(echo "$IntputBED" | perl -alne '$key="$F[0]:$F[1]-$F[2]|$F[5]|$F[3]"; $F[3]=$key; $F[10]="200,";$F[11]="0,";$F[9]=1; if($F[5] eq "+"){ $F[1]=$F[2]-100; $F[2]=$F[2]+100;}; if($F[5] eq "-"){ $F[2]=$F[1]+100;$F[1]=$F[1]-100;}; $F[6]=$F[2];$F[7]=$F[2];$,="\t";print @F;' | bedtools getfasta -bed - -fi $GENOME -s -split -name | paste - - | perl -alne '$F[1]=~tr/atcgn/ATCGN/; $,="\t"; $F[0]=~/^>(.+)::.+\(.\)/; $F[0]=$1; print @F;')
 echo "$IntputSeq" > $PREFIX".DeepPASS"
-python $DeepPASSpredict -m $DeepPASSmodel -p $PREFIX".DeepPASS" -o $PREFIX".DeepPASS.predictout" &> $PREFIX".DeepPASS.predict.log"
+python3 $DeepPASSpredict -m $DeepPASSmodel -p $PREFIX".DeepPASS" -o $PREFIX".DeepPASS.predictout" &> $PREFIX".DeepPASS.predict.log"
 DeepPASS=$(cat $PREFIX".DeepPASS.predictout/Predict_Result.txt" )
 rm -fr $PREFIX".DeepPASS.predictout" $PREFIX".DeepPASS"
 
