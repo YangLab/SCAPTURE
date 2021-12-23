@@ -238,6 +238,7 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 	
 	
   Quantify high-confidence PASs in six PBMC samples:
+  
 	scapture -m PASquant -b PBMC3k.test.bam --celllist PBMC3k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC3k.PASquant &> PBMC3k.PASquant.log
 	scapture -m PASquant -b PBMC4k.test.bam --celllist PBMC4k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC4k.PASquant &> PBMC4k.PASquant.log
 	scapture -m PASquant -b PBMC5k.test.bam --celllist PBMC5k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC5k.PASquant &> PBMC5k.PASquant.log
