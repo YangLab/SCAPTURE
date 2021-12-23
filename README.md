@@ -218,7 +218,7 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
  * the 14th column is "DeepPASS prediction of the PAS."
  * the 15th column is "±100 nt sequence around the cleavage site of PAS."
 
-  Specifically, for "IntegratedSamples.bed",
+  Specifically, for "IntegratedSamples.bed" (ignored, not used in downstream analysis),
  * the 16th column is the index id during peak combination.
  * the 17th column the number of peaks with the same index id.
 
