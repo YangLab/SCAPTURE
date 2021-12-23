@@ -171,11 +171,20 @@ Author: Guo-Wei Li Email: liguowei@picb.ac.cn
 	PBMC3k.exonic.peaks.evaluated.bed # evaluated exonic peaks
 	PBMC3k.intronic.peaks.bed # filtered intronic peaks
 	PBMC3k.intronic.peaks.annotated.bed # assigned intronic peaks
-	PBMC3k.intronic.peaks.evaluated.bed # evaluated intronic peak
+	PBMC3k.intronic.peaks.evaluated.bed # evaluated intronic peaks
 	PBMC3k.3primeExtended.peaks.evaluated.bed # assigned peaks in dowstream region out of gene 3UTR locus
-	PBMC3k.3primeExtended.peaks.annotated.bed # evaluated intronic peak in dowstream region out of gene 3UTR locus
+	PBMC3k.3primeExtended.peaks.annotated.bed # evaluated peaks in dowstream region out of gene 3UTR locus
 
-  The output poly(A) site file was in widely used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7). Briefly, the colum 1-6 represent the peak region of poly(A) sites, the colum 7-12 represent detail blocks information of the peak region.
+  The output poly(A) site file was in widely used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7).
+  
+  Briefly, 
+ * the 1-12 columns represent the spliced peak region of the peak region. 
+
+  Specifically, for "evaluated.bed",
+ * the 13th column is "number of refernce poly(A) sites supporting the PAS."
+ * the 14th column is "DeepPASS prediction of the PAS."
+ * the 15th column is "±100 nt sequence around the cleavage site of PAS."
+	   
 
 ### Run scapture PASmerge module
 
@@ -203,9 +212,15 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 	PBMC_ALL.intronic.IntegratedSamples.bed
 	PBMC_ALL.3primeExtended.IntegratedSamples.bed
 	
-  * Combined peaks are written in files with "Integrated.bed", columns 1-12 are bed format for peak loci, column 13 is the number of covered known PAS in given poly(A) database file, column 14 and 15 are prediction outcome and sequences around cleavage site of DeepPASS, respectively.
-  
-  * Peaks from all samples are written in files with "IntegratedSamples.bed", columns 1-15 are similar to "Integrated.bed", column 16 is the index id during peak combination, column 17 is the number of peaks with the same index id.
+  Combined peaks are written in files with "Integrated.bed" [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7),
+ * the 1-12 columns represent the spliced peak region of the peak region. 
+ * the 13th column is "number of refernce poly(A) sites supporting the PAS."
+ * the 14th column is "DeepPASS prediction of the PAS."
+ * the 15th column is "±100 nt sequence around the cleavage site of PAS."
+
+  Specifically, for "IntegratedSamples.bed",
+ * the 16th column is the index id during peak combination.
+ * the 17th column the number of peaks with the same index id.
 
 
 ### Run scapture PASquant module
