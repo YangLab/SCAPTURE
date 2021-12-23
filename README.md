@@ -225,16 +225,19 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 
 ### Run scapture PASquant module
 
-  For PAS quantifying at single-cell level expression, we only keep the high-confidence PASs, that is, PASs with a positive prediction by DeepPASS
+  For PAS quantifying at single-cell level expression, users can chose different subset of PASs for their goals. In our paper, we recomanded select the high-cofident PASs with positive prediction and konwn sites overlapped.
   
-	#Select PASs with positive prediction
-	#With input polyaDB
+	# 1. Select PASs with positive prediction and konwn sites overlapped (recomanded)
 	perl -alne '$,="\t";print @F[0..11] if $F[12] > 0 | $F[13] eq "positive";' PBMC_ALL.exonic.Integrated.bed PBMC_ALL.intronic.Integrated.bed > PBMC_ALL.PASquant.bed
-	#Or, without input polyaDB
+	
+	# 2. Select PASs with positive prediction (no konwn sites filter)
 	perl -alne '$,="\t";print @F[0..11] if $F[13] eq "positive";' PBMC_ALL.exonic.Integrated.bed PBMC_ALL.intronic.Integrated.bed > PBMC_ALL.PASquant.bed
 	
+	# 3. Select all raw PASs
+	perl -alne '$,="\t";print @F[0..11];' PBMC_ALL.exonic.Integrated.bed PBMC_ALL.intronic.Integrated.bed > PBMC_ALL.PASquant.bed
 	
-	#Quantify high-confidence PASs in six PBMC samples:
+	
+  Quantify high-confidence PASs in six PBMC samples:
 	scapture -m PASquant -b PBMC3k.test.bam --celllist PBMC3k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC3k.PASquant &> PBMC3k.PASquant.log
 	scapture -m PASquant -b PBMC4k.test.bam --celllist PBMC4k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC4k.PASquant &> PBMC4k.PASquant.log
 	scapture -m PASquant -b PBMC5k.test.bam --celllist PBMC5k.celllist --pas PBMC_ALL.PASquant.bed -o PBMC5k.PASquant &> PBMC5k.PASquant.log
