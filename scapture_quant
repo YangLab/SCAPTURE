@@ -125,8 +125,8 @@ if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
 	fi
 	if [[ "$CellList" != "NULL" && "$CellList" == "FromBAM" ]]; then
 		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $BAMFile &> /dev/null
-		samtools sort -@ 4 "${PREFIX%/*}/$(basename $BAMFile).featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
-		rm "${PREFIX%/*}/$(basename $BAMFile).featureCounts.bam"
+		samtools sort -@ 4 "$(dirname $PREFIX)/$(basename $BAMFile).featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
+		rm "$(dirname $PREFIX)/$(basename $BAMFile).featureCounts.bam"
 	fi
 	#echo -n "PASquant Step3: re-assign reads to PASs. "; date	
 	samtools index $PREFIX".KeepCell.reassigned.bam"
