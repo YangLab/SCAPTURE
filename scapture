@@ -225,7 +225,7 @@ fi
 
 if [ "$MODULE" == "PAScall2" ]; then
 	echo -n "scapture PAScall: peak calling. "; date
-	cat $PREFIX".CallPasPerGene.sh" | parallel -j $MEGAthread
+	cat $PREFIX".CallPasPerGene.sh" | parallel -j $MEGAthread &> /dev/null
 	wait
 	GeneList=$(perl -alne '@s=split(/\|/,$F[1]);$gene{"$s[0]"}+=$F[0]; END{for $g (keys %gene){print $g if $gene{$g} > 0;}}' $PREFIX".genetype.count.txt" )
 	wait
