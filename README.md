@@ -172,10 +172,10 @@ Author: Guo-Wei Li Email: liguowei@picb.ac.cn
 	PBMC3k.intronic.peaks.bed # filtered intronic peaks
 	PBMC3k.intronic.peaks.annotated.bed # assigned intronic peaks
 	PBMC3k.intronic.peaks.evaluated.bed # evaluated intronic peaks
-	PBMC3k.3primeExtended.peaks.evaluated.bed # assigned peaks in dowstream region out of gene 3UTR locus
-	PBMC3k.3primeExtended.peaks.annotated.bed # evaluated peaks in dowstream region out of gene 3UTR locus
+	PBMC3k.3primeExtended.peaks.annotated.bed # assigned peaks in dowstream region beyond 3' end of genes
+	PBMC3k.3primeExtended.peaks.evaluated.bed # evaluated peaks in dowstream region beyond 3' end of genes
 
-  The output poly(A) site file was in widely used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7).
+  The output poly(A) site file was in widely-used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7).
   
   Briefly, 
  * the 1-12 columns represent the spliced peak region of PAS. 
