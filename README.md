@@ -178,7 +178,7 @@ Author: Guo-Wei Li Email: liguowei@picb.ac.cn
   The output poly(A) site file was in widely used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7).
   
   Briefly, 
- * the 1-12 columns represent the spliced peak region of the peak region. 
+ * the 1-12 columns represent the spliced peak region of PAS. 
 
   Specifically, for "evaluated.bed",
  * the 13th column is "number of refernce poly(A) sites supporting the PAS."
@@ -213,7 +213,7 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 	PBMC_ALL.3primeExtended.IntegratedSamples.bed
 	
   Combined peaks are written in files with "Integrated.bed" [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7),
- * the 1-12 columns represent the spliced peak region of the peak region. 
+ * the 1-12 columns represent the spliced peak region of PAS. 
  * the 13th column is "number of refernce poly(A) sites supporting the PAS."
  * the 14th column is "DeepPASS prediction of the PAS."
  * the 15th column is "±100 nt sequence around the cleavage site of PAS."
