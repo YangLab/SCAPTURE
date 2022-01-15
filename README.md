@@ -175,10 +175,10 @@ Author: Guo-Wei Li Email: liguowei@picb.ac.cn
 	PBMC3k.3primeExtended.peaks.annotated.bed # assigned peaks in dowstream region beyond 3' end of genes
 	PBMC3k.3primeExtended.peaks.evaluated.bed # evaluated peaks in dowstream region beyond 3' end of genes
 
-  The output poly(A) site file was in widely-used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7).
+  The output poly(A) site file was in widely-used [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7)[see](https://github.com/YangLab/SCAPTURE/blob/main/scripts/BED12_format.png).
   
   Briefly, 
- * the 1-12 columns represent the spliced peak region of PAS. 
+ * the 1-12 columns represent the spliced peak region of PAS. [see](https://github.com/YangLab/SCAPTURE/blob/main/scripts/BED12_format.png)
 
   Specifically, for "evaluated.bed",
  * the 13th column is "number of refernce poly(A) sites supporting the PAS."
@@ -212,8 +212,8 @@ If your study includes multiple samples, SCAPTURE can merge the peak result from
 	PBMC_ALL.intronic.IntegratedSamples.bed
 	PBMC_ALL.3primeExtended.IntegratedSamples.bed
 	
-  Combined peaks are written in files with "Integrated.bed" [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7),
- * the 1-12 columns represent the spliced peak region of PAS. 
+  Combined peaks are written in files with "Integrated.bed" [BED format](https://genome.ucsc.edu/FAQ/FAQformat.html#format1.7)[see](https://github.com/YangLab/SCAPTURE/blob/main/scripts/BED12_format.png),
+ * the 1-12 columns represent the spliced peak region of PAS[see](https://github.com/YangLab/SCAPTURE/blob/main/scripts/BED12_format.png). 
  * the 13th column is "number of refernce poly(A) sites supporting the PAS."
  * the 14th column is "DeepPASS prediction of the PAS."
  * the 15th column is "±100 nt sequence around the cleavage site of PAS."
