@@ -248,6 +248,7 @@ if [ "$MODULE" == "PAScall2" ]; then
 	cp $OUTDIR/$PREFIX".exonic.peaks.bed" $PREFIX".exonic.peaks.bed"
 	cp $OUTDIR/$PREFIX".intronic.peaks.bed" $PREFIX".intronic.peaks.bed"
 	wait
+	rm $PREFIX".CallPasPerGene.sh" $PREFIX".genetype.count.txt"
 	echo -n "scapture PAScall: peak calling done. "; date
 	MODULE="PAScall3"
 fi
