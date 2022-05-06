@@ -2,7 +2,7 @@
 helpdoc(){
     cat <<EOF
 Description:
-	SCAPRUTE pipeline. A deep learning-embedded pipeline that captures polyadenylation information from 3 prime tag-based RNA-seq of single cells
+	SCAPTURE pipeline. A deep learning-embedded pipeline that captures polyadenylation information from 3 prime tag-based RNA-seq of single cells
 
 Usage:
     scapture -m <annotation|PAScall|PASmerge|PASquant> [options]
