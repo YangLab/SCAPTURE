@@ -10,6 +10,10 @@ rawcount <- Matrix::Matrix(as.matrix( rawcount ), sparse = TRUE)
 rawcount_fix <- rawcount
 allnames <- rownames(rawcount)
 overlapid <- grep(",",allnames)
+if(length(overlapid) == 0){
+	system(paste0("cp ",inputfile,outfile))
+	quit(save="no")
+}
 overlapname <- allnames[overlapid]
 multiplethreads <- TRUE
 
