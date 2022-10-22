@@ -11,7 +11,7 @@ rawcount_fix <- rawcount
 allnames <- rownames(rawcount)
 overlapid <- grep(",",allnames)
 if(length(overlapid) == 0){
-	system(paste0("cp ",inputfile,outfile,".gz"))
+	system(paste0("cp ",inputfile," ",outfile,".gz"))
 	quit(save="no")
 }
 overlapname <- allnames[overlapid]
