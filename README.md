@@ -6,6 +6,7 @@ Description:
 	SCAPRUTE pipeline. A deep learning-embedded pipeline that captures polyadenylation information from 3 prime tag-based RNA-seq of single cells
 
 ## Installation:
+* Require [Bedtools v2.26.0](https://bedtools.readthedocs.io/en/latest/)
 * Require [featureCounts ≥ v1.6.2](http://bioinf.wehi.edu.au/featureCounts/)
 
 * Create conda env from [SCAPTURE yaml file](https://github.com/YangLab/SCAPTURE/blob/main/SCAPTURE_env.yml):
