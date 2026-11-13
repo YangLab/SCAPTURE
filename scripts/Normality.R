@@ -5,6 +5,27 @@ args <- commandArgs(trailingOnly = TRUE)
 genepeak <- as.character(args[1])
 genecov <- as.character(args[2])
 peakwidth <- as.numeric(args[3])/2
+
+# Optional per-transcript deterministic seeding for reproducible parallel runs
+seed_env <- Sys.getenv("SCAPTURE_NORMALITY_SEED", unset = "")
+if (!nzchar(seed_env)) {
+    seed_env <- Sys.getenv("SCPOLASEQ_SCAPTURE_NORMALITY_SEED", unset = "")
+}
+if (nzchar(seed_env)) {
+    if (!grepl("^[0-9]+$", seed_env)) {
+        stop("SCAPTURE_NORMALITY_SEED must be an integer from 0 to 2147483646")
+    }
+    base_seed <- suppressWarnings(as.numeric(seed_env))
+    if (!is.finite(base_seed) || base_seed >= 2147483647) {
+        stop("SCAPTURE_NORMALITY_SEED must be an integer from 0 to 2147483646")
+    }
+    seed <- base_seed
+    for (byte in utf8ToInt(basename(genepeak))) {
+        seed <- (seed * 131 + byte) %% 2147483647
+    }
+    set.seed(as.integer(seed))
+}
+
 cov <- read.table(genecov, header=F, stringsAsFactors = F)
 peak <- read.table(genepeak)
 

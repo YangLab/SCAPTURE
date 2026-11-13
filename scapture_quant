@@ -23,6 +23,7 @@ Options:
                 cell type in --celltype option
                 (true, false, default: false)
   -p          -- number of threads. (default: 4)
+ --strand    -- library strandedness (forward, reverse, unstranded; default: forward)
   
 Version: 1.0 2021/01/25
 
@@ -43,9 +44,10 @@ ConvertBW="false"
 CellList="NULL"
 CellType="NULL"
 Thread=4
+STRAND="${SCAPTURE_STRAND:-forward}"
 
 #get command line parameters
-ARGS=`getopt -o o:b:p:h --long pas:,celllist:,celltype:,bw:,help  -- "$@"`
+ARGS=`getopt -o o:b:p:h --long pas:,celllist:,celltype:,bw:,strand:,strandedness:,help  -- "$@"`
 eval set -- "$ARGS"
 while true ; do
 	case "$1" in
@@ -56,6 +58,7 @@ while true ; do
 		--celllist) CellList=$2 ; shift 2;;
 		--celltype) CellType=$2 ; shift 2;;
 		--bw) ConvertBW=$2 ; shift 2;;
+		--strand|--strandedness) STRAND=$2 ; shift 2;;
 		-h) helpdoc ; exit 1;;
 		--help) helpdoc ; exit 1;;
 		--)
@@ -67,17 +70,11 @@ while true ; do
 done
 
 #check parameters:
-if [ -z "$SCAPTUREPATH" ]; then
-#	echo "scapture path is not set. Try to find scapture in current ENV"
-	SCAPTUREPATH=$(which scapture)
-	if [[ "$SCAPTUREPATH" == *scapture ]]; then
-#		echo "scapture is found in: "$SCAPTUREPATH
-		SCAPTUREPATH=${SCAPTUREPATH%scapture}
-	else
-		echo "scapture is not found!"
-		exit 1
-	fi
-fi
+_sc_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+source "${_sc_dir}/scripts/scapture_common.sh" || exit 1
+scapture_resolve_path "$_sc_dir" || exit 1
+FC_STRAND=$(scapture_featurecounts_strand "$STRAND") || exit 1
+export SCAPTURE_STRAND="$STRAND"
 if [ ! -e "$BAMFile" ]; then echo $BAMFile" dosn't exisits! exit !"; exit 1; fi;
 if [ ! -e "$PAS" ]; then echo $PAS" dosn't exisits! exit !"; exit 1; fi;
 
@@ -119,12 +116,12 @@ if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
 	
 	if [[ "$CellList" != "NULL" && "$CellList" != "FromBAM" ]]; then
 		FilterBamByTag I=$BAMFile O=$PREFIX".KeepCell.srt.bam" SUMMARY=$PREFIX".KeepCell.summary" TAG=CB TAG_VALUES_FILE=$PREFIX".KeepCell.txt" &> $PREFIX".KeepCell.FilterBam.log"
-		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
+		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s $FC_STRAND -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $PREFIX".KeepCell.srt.bam" &> /dev/null
 		samtools sort -@ 4 $PREFIX".KeepCell.srt.bam.featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
 		rm $PREFIX".KeepCell.srt.bam.featureCounts.bam"
 	fi
 	if [[ "$CellList" != "NULL" && "$CellList" == "FromBAM" ]]; then
-		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $BAMFile &> /dev/null
+		featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s $FC_STRAND -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.assigned" $BAMFile &> /dev/null
 		samtools sort -@ 4 "$(dirname $PREFIX)/$(basename $BAMFile).featureCounts.bam" -o $PREFIX".KeepCell.reassigned.bam" &> /dev/null
 		rm "$(dirname $PREFIX)/$(basename $BAMFile).featureCounts.bam"
 	fi
@@ -155,7 +152,7 @@ if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
 	#echo -n "PASquant Step2: done. "; date
 	#sleep 10s
 	#echo -n "PASquant Step3: re-assign reads to PASs. "; date
-	echo "$CellIdentity" | parallel -j $Thread featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s 1 -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.{}.assigned" $PREFIX".KeepCell.{}.srt.bam" "&>" /dev/null
+	echo "$CellIdentity" | parallel -j $Thread featureCounts -M -O --largestOverlap -F GTF -t exon -g gene_id -s $FC_STRAND -T 4 -R BAM -a $PREFIX".KeepPAS.gtf" -o $PREFIX".KeepCell.{}.assigned" $PREFIX".KeepCell.{}.srt.bam" "&>" /dev/null
 	echo "$CellIdentity" | parallel -j $Thread samtools sort -@ 4 $PREFIX".KeepCell.{}.srt.bam.featureCounts.bam" -o $PREFIX".KeepCell.{}.reassigned.bam" "&>" /dev/null
 	echo "$CellIdentity" | parallel -j $Thread samtools index $PREFIX".KeepCell.{}.reassigned.bam"
 	echo "$CellIdentity" | parallel -j $Thread rm $PREFIX".KeepCell.{}.srt.bam.featureCounts.bam" $PREFIX".KeepCell.{}.srt.bam" $PREFIX".KeepCell.{}.srt.bam.bai"
@@ -183,8 +180,10 @@ if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
 	#sleep 10s
 	if [ "$ConvertBW" == "true" ]; then
 		echo "Start to convert BAM to BW file. This step might take a while..."
-		echo "$CellIdentity" | parallel -j $Thread $SCAPTUREPATH"/scripts/bamToBw.py" -d -b $PREFIX".KeepCell.{}.reassigned.bam" "&>" /dev/null
-		echo "$CellIdentity" | parallel -j $Thread rm $PREFIX".KeepCell.{}.reassigned.PLUS.bam" $PREFIX".KeepCell.{}.reassigned.MINUS.bam"
+		echo "$CellIdentity" | parallel -j $Thread $SCAPTUREPATH"/scripts/bamToBw.py" -d --strand "$STRAND" -b $PREFIX".KeepCell.{}.reassigned.bam" "&>" /dev/null
+		if [ "$STRAND" != "unstranded" ]; then
+			echo "$CellIdentity" | parallel -j $Thread rm -f $PREFIX".KeepCell.{}.reassigned.PLUS.bam" $PREFIX".KeepCell.{}.reassigned.MINUS.bam"
+		fi
 		echo "Convert BAM to BW done!"
 	fi
 	unset CellIdentity CellInfor

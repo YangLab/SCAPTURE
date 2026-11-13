@@ -41,7 +41,8 @@ def convert2tensor(data):
     NT_dict = {'A':np.array([1,0,0,0]),'T':np.array([0,1,0,0]),'U':np.array([0,1,0,0]),'G':np.array([0,0,1,0]),'C':np.array([0,0,0,1]),'N':np.array([0,0,0,0])}
     label_dict = {'0': 0, '1':1}
     
-    seq = tf.convert_to_tensor(data["seq"].apply(lambda x:np.array([ NT_dict[i] for i in x],dtype=np.float32)))
+    seq_list = [np.array([NT_dict.get(i, np.array([0,0,0,0])) for i in x], dtype=np.float32) for x in data["seq"]]
+    seq = tf.convert_to_tensor(np.array(seq_list, dtype=np.float32))
     
     Set = {"seq":seq}
     
