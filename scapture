@@ -18,6 +18,7 @@ Options:
  
 Module:         PAScall
 Options:
+ --strand    -- library strandedness (forward, reverse, unstranded; default: forward)
  -a          -- prefix of output annotation files in "annotation" module
  -o          -- Prefix of output file
  -b          -- Cell Ranger aligned BAM file
@@ -42,6 +43,7 @@ Options:
  
 Module:         PASquant 
 Options:
+ --strand    -- library strandedness (forward, reverse, unstranded; default: forward)
  -o          -- output prefix
  -p          -- number of threads.
  -b          -- Cell Ranger aligned BAM file.
@@ -79,8 +81,9 @@ CellList="NULL"
 CellType="NULL"
 ConvertBW="false"
 MEGAthread=4
+STRAND="${SCAPTURE_STRAND:-forward}"
 #get command line parameters
-ARGS=`getopt -o m:a:o:b:g:l:w:p:h --long gtf:,cs:,extend:,species:,overlap:,polyaDB:,peak:,rawpeak:,pas:,celllist:,celltype:,bw:,help  -- "$@"`
+ARGS=`getopt -o m:a:o:b:g:l:w:p:h --long gtf:,cs:,extend:,species:,overlap:,polyaDB:,peak:,rawpeak:,pas:,celllist:,celltype:,bw:,strand:,strandedness:,help  -- "$@"`
 eval set -- "$ARGS"
 while true ; do
 	case "$1" in
@@ -104,6 +107,7 @@ while true ; do
 		--celllist) CellList=$2 ; shift 2;;
 		--celltype) CellType=$2 ; shift 2;;
 		--bw) ConvertBW=$2 ; shift 2;;
+		--strand|--strandedness) STRAND=$2 ; shift 2;;
 		-h) helpdoc ; exit 1;;
 		--help) helpdoc ; exit 1;;
 		--)
@@ -115,17 +119,11 @@ while true ; do
 done
 
 #get path of scapture
-if [ -z "$SCAPTUREPATH" ]; then
-#	echo "scapture path is not set. Try to find scapture in current ENV"
-	SCAPTUREPATH=$(which scapture)
-	if [[ "$SCAPTUREPATH" == *scapture ]]; then
-#		echo "scapture is found in: "$SCAPTUREPATH
-		SCAPTUREPATH=${SCAPTUREPATH%scapture}
-	else
-		echo "scapture is not found!"
-		exit 1
-	fi
-fi
+_sc_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+source "${_sc_dir}/scripts/scapture_common.sh" || exit 1
+scapture_resolve_path "$_sc_dir" || exit 1
+scapture_validate_strand "$STRAND" || exit 1
+export SCAPTURE_STRAND="$STRAND"
 
 <<'COMMENT'
 if [ "$SCAPTUREPATH" != "" ]; then echo "scapture path: "$SCAPTUREPATH; fi
@@ -210,11 +208,13 @@ if [ "$MODULE" == "PAScall" ]; then
 	fi
 	
 	#echo -n "scapture PAScall: estimate gene expression, and filter out gene without reads."; date
-	featureCounts -a $ANNO".genetype.gtf" -g transcript_id -Q 3 -s 1 -M -O --fraction -T 4 -o $PREFIX".featureCount.txt" $BAMFILE &> $PREFIX".featureCount.log"	
+	FC_STRAND=$(scapture_featurecounts_strand "$STRAND") || exit 1
+	export SCAPTURE_STRAND="$STRAND"
+	featureCounts -a $ANNO".genetype.gtf" -g transcript_id -Q 3 -s $FC_STRAND -M -O --fraction -T 4 -o $PREFIX".featureCount.txt" $BAMFILE &> $PREFIX".featureCount.log"	
 	cat $PREFIX".featureCount.txt" | perl -alne 'if($#ARGV==0){next if $_ =~ /^#/ | $F[0] eq "Geneid"; @s=split(/\|/,$F[0]); $count{$F[0]}=$F[$#F];}else{ $c=0;$c=$count{$F[0]} if $count{$F[0]}; $,="\t"; print $c,@F; }' - $ANNO".genetype.txt" > $PREFIX".genetype.count.txt"
 	
 	#echo -n "scapture PAScall: create command line for transcript level peak calling."; date
-	perl -alne 'if($#ARGV==0){ @s=split(/\|/,$F[1]);$gene{$s[0]}+=$F[0];}else{$F[3]=~/(.+)\|(.+)/;$genename=$1; next unless $gene{$genename}; print " -g $genename --locus $F[0]:$F[1]-$F[2] -s $F[5]" if $gene{$genename} > 0;}' $PREFIX".genetype.count.txt" $ANNO".genetype.extended.bed" | parallel echo "scapture_callpeak -o "$OUTDIR"/Per_Gene/scapture -c "$PREFIX".genetype.count.txt -b "$BAMFILE" -l "$FragLength" --cs "$ANNO".chromsize -w "$PeakWidth" --overlap "$OverlapRatio {} > $PREFIX".CallPasPerGene.sh"
+	perl -alne 'if($#ARGV==0){ @s=split(/\|/,$F[1]);$gene{$s[0]}+=$F[0];}else{$F[3]=~/(.+)\|(.+)/;$genename=$1; next unless $gene{$genename}; print " -g $genename --locus $F[0]:$F[1]-$F[2] -s $F[5]" if $gene{$genename} > 0;}' $PREFIX".genetype.count.txt" $ANNO".genetype.extended.bed" | parallel echo "scapture_callpeak -o "$OUTDIR"/Per_Gene/scapture -c "$PREFIX".genetype.count.txt -b "$BAMFILE" -l "$FragLength" --cs "$ANNO".chromsize -w "$PeakWidth" --overlap "$OverlapRatio --strand "$STRAND" {} > $PREFIX".CallPasPerGene.sh"
 	rm $PREFIX".featureCount.txt" $PREFIX".featureCount.txt.summary" $PREFIX".featureCount.log"	
 	
 	#echo $PREFIX".genetype.count.txt" $PREFIX".CallPasPerGene.sh"
@@ -326,11 +326,11 @@ if [ "$MODULE" == "PASquant" ]; then
 	if [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then echo "Cell type list: "$CellType; echo "Convert BAM to BW: "$ConvertBW; fi
 
 	if [[ "$CellList" != "NULL" && "$CellType" == "NULL" ]]; then
-		#echo "scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celllist $CellList"
-		scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celllist $CellList
+		#echo "scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celllist $CellList --strand $STRAND"
+		scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celllist $CellList --strand "$STRAND"
 	elif [[ "$CellList" == "NULL" && "$CellType" != "NULL" ]]; then
-		#echo "scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celltype $CellType --bw $ConvertBW -p $MEGAthread"
-		scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celltype $CellType --bw $ConvertBW -p $MEGAthread
+		#echo "scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celltype $CellType --bw $ConvertBW -p $MEGAthread --strand $STRAND"
+		scapture_quant -o $PREFIX -b $BAMFILE --pas $PAS --celltype $CellType --bw $ConvertBW -p $MEGAthread --strand "$STRAND"
 	else
 		echo "error in input cell file parameter!"
 		exit 1

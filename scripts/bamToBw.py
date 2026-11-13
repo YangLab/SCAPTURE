@@ -43,15 +43,19 @@ def getReadLength(AlignSeg):
 
 	return length
 
-def divideBam(bamFileName):
+def divideBam(bamFileName, strand="forward"):
 	preffixName = os.path.splitext(bamFileName)[0]
 	suffixName = os.path.splitext(bamFileName)[1]
 	bamPlusFileName = preffixName+".PLUS"+suffixName
 	bamMinusFileName = preffixName+".MINUS"+suffixName
 	
-	#Note: for 10x Genomics, library strand information is: [ + -> -F 0x10 ] [ - -> -f 0x10 ]
-	creatPlusCMD = "samtools view -@ 4 -F 16 -h -b -o "+bamPlusFileName+" "+bamFileName ; os.system(creatPlusCMD)
-	creatMinusCMD = "samtools view -@ 4 -f 16 -h -b -o "+bamMinusFileName+" "+bamFileName ; os.system(creatMinusCMD)
+	# Forward (e.g. 10x 3' v2/v3): + -> -F 16, - -> -f 16. Reverse (e.g. 10x 3' v1 / 5'): inverted.
+	if strand == "reverse":
+		plus_flag, minus_flag = "-f 16", "-F 16"
+	else:
+		plus_flag, minus_flag = "-F 16", "-f 16"
+	creatPlusCMD = "samtools view -@ 4 "+plus_flag+" -h -b -o "+bamPlusFileName+" "+bamFileName ; os.system(creatPlusCMD)
+	creatMinusCMD = "samtools view -@ 4 "+minus_flag+" -h -b -o "+bamMinusFileName+" "+bamFileName ; os.system(creatMinusCMD)
 	
 	return (bamPlusFileName, bamMinusFileName)
 
@@ -79,7 +83,7 @@ def convertName(bamFileNames):
 	return (bgFileNames, bwFileNames, sortedbgFileNames) 
 
 
-def converOneBam(bamFile, ratio, FLAG_STRAND, FLAG_LEHGTH):
+def converOneBam(bamFile, ratio, FLAG_STRAND, FLAG_LEHGTH, strand="forward"):
 	TOTAL_RATIO = 1
 	
 	if not os.path.exists(bamFile + '.bai'):
@@ -88,8 +92,8 @@ def converOneBam(bamFile, ratio, FLAG_STRAND, FLAG_LEHGTH):
 	#creat chromesize tmp file
 	chromeSizeFileName = creatChromeSize(bamFile)	
 
-	if FLAG_STRAND == True:
-		bamFileDivided = divideBam(bamFile)
+	if FLAG_STRAND == True and strand != "unstranded":
+		bamFileDivided = divideBam(bamFile, strand=strand)
 	else:
 		bamFileDivided = [bamFile]
 	
@@ -144,7 +148,12 @@ if __name__ == '__main__':
                       help="To consider the strand")
 	parser.add_option("-l", dest="FLAG_LEHGTH", action="store_true",
                       default=False, help="Consider lengths of all reads")
+	parser.add_option("--strand", dest="strand",
+                      default=os.environ.get("SCAPTURE_STRAND", "forward"),
+                      help="Library strandedness: forward, reverse, or unstranded")
 	(options, args) = parser.parse_args()
+	if options.strand not in ("forward", "reverse", "unstranded"):
+		parser.error("Invalid --strand '%s'. Expected forward, reverse, or unstranded." % options.strand)
 	bamFile = parseBamName(options.bamFile)
 
-	converOneBam(bamFile, 1, options.FLAG_STRAND, options.FLAG_LEHGTH)
+	converOneBam(bamFile, 1, options.FLAG_STRAND, options.FLAG_LEHGTH, strand=options.strand)
